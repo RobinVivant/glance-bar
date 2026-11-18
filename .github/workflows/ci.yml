@@ -16,7 +16,9 @@ concurrency:
 jobs:
   test:
     name: Build and test
-    runs-on: macos-latest
+    # The oldest macOS the app supports, so the toolchain of that release is the one checked.
+    # Its runners are also handed out at once, where macos-latest jobs can queue until dropped.
+    runs-on: macos-15
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
