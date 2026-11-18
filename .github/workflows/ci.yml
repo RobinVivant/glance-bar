@@ -1,0 +1,38 @@
+name: CI
+
+# Pull requests only: the repository is private, where macOS runners bill ten minutes for each
+# minute they run, and a push to main would repeat the run its pull request already had.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain
+        run: |
+          sw_vers
+          swift --version
+      - name: Test
+        run: swift test
+      - name: Build and package the app
+        run: scripts/package-release.sh
+      - name: Render the demo snapshots
+        run: swift run GlanceBar --snapshot "$RUNNER_TEMP/snapshots" --demo
+      - name: Upload the snapshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: snapshots
+          path: ${{ runner.temp }}/snapshots
+          if-no-files-found: error
