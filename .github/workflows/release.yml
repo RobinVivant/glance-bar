@@ -11,7 +11,9 @@ permissions:
 jobs:
   release:
     name: Publish the release
-    runs-on: macos-latest
+    # The runner CI uses, so a release is built by the toolchain its commit was tested with.
+    # A macos-latest job can also sit in the queue until GitHub drops it.
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
