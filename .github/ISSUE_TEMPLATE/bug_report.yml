@@ -1,0 +1,57 @@
+name: Bug report
+description: Something shows the wrong value, is missing, fails or crashes
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you saw and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Say whether `swift run GlanceBar --demo` shows it too.
+      placeholder: |
+        1. Open the panel
+        2. Click ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Glance Bar version
+      description: >-
+        The version of the release you installed, or the output of `git rev-parse --short HEAD`
+        for a build from source.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "15.5"
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model and chip
+      description: >-
+        From About This Mac. Temperature sensors differ per chip, so this matters for a wrong or
+        missing temperature.
+      placeholder: MacBook Pro 16-inch, M3 Pro
+    validations:
+      required: true
+  - type: input
+    id: displays
+    attributes:
+      label: Number of displays
+      description: Only for a problem with the menu bar item or with CPU use.
+  - type: textarea
+    id: more
+    attributes:
+      label: Screenshots or logs
+      description: A snapshot from `swift run GlanceBar --snapshot /tmp/glance-bar` helps for a layout or reading problem.

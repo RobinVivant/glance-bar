@@ -24,4 +24,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" build/Glance-Bar-*-arm64.zip build/Glance-Bar-*-arm64.zip.sha256 \
-            --verify-tag --title "Glance Bar ${GITHUB_REF_NAME#v}" --generate-notes
+            --verify-tag --title "Glance Bar ${GITHUB_REF_NAME#v}" --generate-notes \
+            --notes "Install steps: https://github.com/${GITHUB_REPOSITORY}#quickstart"

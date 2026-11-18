@@ -1,4 +1,12 @@
-# Glance Bar
+<h1 align="center">
+  <img src="docs/banner.png" width="800" alt="Glance Bar: system stats at a glance in your menu bar">
+</h1>
+
+<p align="center">
+  <a href="https://github.com/RobinVivant/glance-bar/actions/workflows/ci.yml"><img src="https://github.com/RobinVivant/glance-bar/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/macOS-15%2B-black?logo=apple" alt="macOS 15 or later">
+</p>
 
 Glance Bar is a macOS menu bar app that shows CPU, GPU, memory, disk, temperature, battery and
 network activity in one compact item, with a detail panel behind a click.
@@ -16,8 +24,41 @@ The screenshots show the made-up readings of [demo mode](#try-it-without-install
 
 ## Quickstart
 
-You need macOS 15 or later on Apple silicon and a Swift 6 toolchain (Xcode or the Command Line
-Tools).
+You need macOS 15 or later on Apple silicon.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/RobinVivant/glance-bar/main/scripts/get.sh | bash
+```
+
+The [script](scripts/get.sh) downloads the latest release, checks it against its SHA-256 file and
+its signature, copies `Glance Bar.app` to `~/Applications` and opens it. The item appears in the
+menu bar; click it for the panel. The first launch from an Applications folder turns on Open at
+Login. Run the same line again to update.
+
+If the item does not show up, the menu bar is full: macOS puts new items behind the `«` chevron
+at the left end of the status area. Hold Command and drag the item to where you want it.
+
+### Download by hand
+
+1. Download `Glance-Bar-<version>-arm64.zip` from the
+   [latest release](https://github.com/RobinVivant/glance-bar/releases/latest) and unzip it.
+2. Move `Glance Bar.app` to `/Applications` or `~/Applications`.
+3. Open it. macOS blocks the first launch of a copy downloaded with a browser, because the build
+   is not notarized by Apple: choose **Done**, open **System Settings > Privacy & Security**,
+   scroll to the message about Glance Bar and choose **Open Anyway**. From a terminal, this does
+   the same:
+
+    ```bash
+    xattr -dr com.apple.quarantine "/Applications/Glance Bar.app"
+    ```
+
+The install script does not hit this block: `curl` does not mark its downloads as coming from
+the internet, so macOS has nothing to check.
+
+### Build from source
+
+With a Swift 6 toolchain (Xcode or the Command Line Tools), this builds `Glance Bar.app`, copies
+it to `~/Applications` and opens it. A build made on your own Mac opens without the block.
 
 ```bash
 git clone https://github.com/RobinVivant/glance-bar.git
@@ -25,16 +66,10 @@ cd glance-bar
 scripts/install.sh
 ```
 
-The script builds `Glance Bar.app`, copies it to `~/Applications` and opens it. The item appears
-in the menu bar; click it for the panel. The first launch from an Applications folder turns on
-Open at Login. Run the script again to update.
-
-If the item does not show up, the menu bar is full: macOS puts new items behind the `«` chevron
-at the left end of the status area. Hold Command and drag the item to where you want it.
-
 ### Try it without installing
 
-Demo mode runs the app on made-up readings. It reads no sensor and saves no setting.
+From a checkout, demo mode runs the app on made-up readings. It reads no sensor and saves no
+setting.
 
 ```bash
 swift run GlanceBar --demo
@@ -148,16 +183,25 @@ scripts/build-app.sh                                  # the release app bundle i
   render model of the menu bar item. No AppKit. Covered by `Tests/GlanceCoreTests`.
 - `Sources/GlanceBar`: the status item and its Core Graphics renderer, the sampling loop, the
   popover and its SwiftUI views.
-- `scripts/`: build, install, release packaging and the icon generator.
+- `scripts/`: build, install, release packaging, and the icon and brand image generators.
 
 Without `--demo`, `--snapshot` renders the live readings of your Mac. The images in
 `docs/screenshots` come from `--snapshot docs/screenshots --demo`.
 
 CI builds, tests and renders the demo snapshots on every pull request. Pushing a tag such as
 `v1.0.0` that matches the version in `Resources/Info.plist` publishes `Glance Bar.app` as a
-zipped GitHub release. The build is signed ad hoc and not notarized by Apple, so macOS blocks
-the first launch of a copy downloaded with a browser until you clear its quarantine mark:
+zipped GitHub release.
 
-```bash
-xattr -dr com.apple.quarantine "Glance Bar.app"
-```
+## Contributing
+
+Bug reports and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the setup,
+the checks and the guidelines, and the [Code of Conduct](CODE_OF_CONDUCT.md) applies to every
+project space.
+
+## License
+
+[MIT](LICENSE).
+
+Glance Bar is an independent project. It is not affiliated with or endorsed by Apple or by
+Bjango, the makers of iStat Menus. The sensor key lists for chips other than the M1 follow the
+[Stats](https://github.com/exelban/stats) project, which is also MIT licensed.

@@ -1,8 +1,8 @@
 name: CI
 
-# Pull requests only: the repository is private, where macOS runners bill ten minutes for each
-# minute they run, and a push to main would repeat the run its pull request already had.
 on:
+  push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
