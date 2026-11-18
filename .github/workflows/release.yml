@@ -1,0 +1,27 @@
+name: Release
+
+# Pushing a tag such as v1.2.3 tests, builds and publishes that version as a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish the release
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test
+        run: swift test
+      - name: Package the app
+        run: scripts/package-release.sh "$GITHUB_REF_NAME"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/Glance-Bar-*-arm64.zip build/Glance-Bar-*-arm64.zip.sha256 \
+            --verify-tag --title "Glance Bar ${GITHUB_REF_NAME#v}" --generate-notes
