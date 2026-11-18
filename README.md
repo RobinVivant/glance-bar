@@ -64,11 +64,13 @@ swift run GlanceBar --demo
     | Disk used | 90% | 95% |
     | Temperature | 90° | 100° |
     | Battery, on battery power only | 20% | 10% |
+    | Battery health, in the panel | Below 80% | Never |
 
 - **Panel** (left click): CPU history and one bar per core, memory split into app, wired and
   compressed with the pressure level, network rates with a chart and the totals since boot, disk
-  space, battery time and cycles, and the CPU, GPU, SSD and battery temperatures. The
-  footer shows what Glance Bar itself uses.
+  space, battery time, health and cycle count, and the CPU, GPU, SSD and battery temperatures.
+  Battery health is what a full charge holds as a share of the design capacity, the figure macOS
+  calls Maximum Capacity. The footer shows what Glance Bar itself uses.
 - **Settings** (the gear in the panel): a switch and order arrows per meter, the refresh interval
   (1, 2, 3 or 5 seconds, 2 by default), Open at Login, Activity Monitor and Quit.
 - **Right click**: Open Activity Monitor and Quit.
@@ -113,7 +115,7 @@ What keeps it low:
 | Memory | `host_statistics64`, `kern.memorystatus_level` and `kern.memorystatus_vm_pressure_level` |
 | Temperatures | The System Management Controller, read-only, through the `AppleSMC` service |
 | Network | Interface byte counters from `sysctl` (`NET_RT_IFLIST2`) |
-| Battery | IOKit power sources, and `AppleSmartBattery` for the cycle count |
+| Battery | IOKit power sources, and `AppleSmartBattery` for the capacities and the cycle count |
 | Disk | Volume capacity of `/`, counting the space macOS can free on demand |
 
 Settings live in the app's user defaults (`local.glance-bar`). The app writes no other file and

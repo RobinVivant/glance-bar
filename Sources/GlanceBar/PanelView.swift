@@ -63,10 +63,12 @@ struct PanelView: View {
             cpuCard
             if let memory = model.snapshot.memory { memoryCard(memory) }
             networkCard
+            // The battery card can be a line taller: the disk card grows to match it.
             HStack(alignment: .top, spacing: 8) {
                 if let disk = model.snapshot.disk { diskCard(disk) }
                 if let battery = model.snapshot.battery { batteryCard(battery) }
             }
+            .fixedSize(horizontal: false, vertical: true)
             temperatureCard
         }
     }
@@ -192,6 +194,7 @@ struct PanelView: View {
                 CapsuleBar(used: disk.usedFraction, color: Palette.level(level, normal: Palette.disk))
                 Text("\(Format.storage(disk.free)) free of \(Format.storage(disk.total))").caption().lineLimit(1)
             }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -205,22 +208,27 @@ struct PanelView: View {
                     Text("\(battery.percent)%").caption()
                 }
                 CapsuleBar(used: Double(battery.percent) / 100, color: Palette.level(level, normal: Palette.ok))
-                Text(Self.batteryState(battery, health: model.detail.batteryHealth)).caption().lineLimit(1)
+                Text(Self.batteryState(battery)).caption().lineLimit(1)
+                if let health = model.detail.batteryHealth { Self.batteryHealth(health).caption().lineLimit(1) }
             }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
-    private static func batteryState(_ battery: BatteryReading, health: BatteryHealth?) -> String {
-        var parts: [String] = []
+    private static func batteryState(_ battery: BatteryReading) -> String {
         if battery.charging {
-            parts.append(battery.minutesLeft.map { "full in \(Format.duration(TimeInterval($0 * 60)))" } ?? "charging")
-        } else if battery.onAC {
-            parts.append("on power")
-        } else {
-            parts.append(battery.minutesLeft.map { "\(Format.duration(TimeInterval($0 * 60))) left" } ?? "on battery")
+            return battery.minutesLeft.map { "full in \(Format.duration(TimeInterval($0 * 60)))" } ?? "charging"
         }
-        if let health { parts.append("\(health.cycles) cycles") }
-        return parts.joined(separator: " · ")
+        if battery.onAC { return "on power" }
+        return battery.minutesLeft.map { "\(Format.duration(TimeInterval($0 * 60))) left" } ?? "on battery"
+    }
+
+    /// The capacity turns amber once the battery counts as worn.
+    private static func batteryHealth(_ health: BatteryHealth) -> Text {
+        guard let capacity = health.capacity else { return Text("\(health.cycles) cycles") }
+        var figure = Text("\(capacity)%")
+        if Levels.batteryHealth(capacity) != .normal { figure = figure.foregroundStyle(Palette.amber) }
+        return Text("Health \(figure) · \(health.cycles) cycles")
     }
 
     private var temperatureCard: some View {

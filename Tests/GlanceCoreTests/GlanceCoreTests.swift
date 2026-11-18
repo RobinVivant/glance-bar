@@ -556,6 +556,43 @@ import Testing
         #expect(BatteryMath.reading(from: source([kIOPSCurrentCapacityKey: 120]))?.percent == 100)
     }
 
+    /// The values this M1 Max reports on macOS 27, where System Information shows 83%.
+    private static let nested: [String: Any] = [
+        "CycleCount": 531,
+        "BatteryData": ["DesignCapacity": 6075, "NominalChargeCapacity": 5065, "AppleRawMaxCapacity": 4915],
+    ]
+
+    @Test func healthIsTheNominalShareOfTheDesignCapacity() {
+        #expect(BatteryMath.health(from: Self.nested) == BatteryHealth(cycles: 531, capacity: 83))
+    }
+
+    @Test func healthReadsCapacitiesFromTheEntryItselfOnOlderSystems() {
+        let flat: [String: Any] = ["CycleCount": 12, "DesignCapacity": 6000, "NominalChargeCapacity": 5400]
+        #expect(BatteryMath.health(from: flat) == BatteryHealth(cycles: 12, capacity: 90))
+    }
+
+    @Test func healthFallsBackToTheRawCapacity() {
+        let raw: [String: Any] = ["CycleCount": 531, "BatteryData": ["DesignCapacity": 6075, "AppleRawMaxCapacity": 4915]]
+        #expect(BatteryMath.health(from: raw) == BatteryHealth(cycles: 531, capacity: 81))
+    }
+
+    @Test func aNewBatteryIsNotOverAHundredPercent() {
+        let new: [String: Any] = ["CycleCount": 3, "DesignCapacity": 6075, "NominalChargeCapacity": 6249]
+        #expect(BatteryMath.health(from: new) == BatteryHealth(cycles: 3, capacity: 100))
+    }
+
+    @Test func healthWithoutUsableCapacitiesKeepsTheCycles() {
+        #expect(BatteryMath.health(from: ["CycleCount": 40]) == BatteryHealth(cycles: 40))
+        #expect(BatteryMath.health(from: ["CycleCount": 40, "DesignCapacity": 0, "NominalChargeCapacity": 5000])
+            == BatteryHealth(cycles: 40))
+        #expect(BatteryMath.health(from: ["DesignCapacity": 6075, "NominalChargeCapacity": 5065]) == nil)
+    }
+
+    @Test func aWornBatteryWarnsBelowEightyPercent() {
+        #expect(Levels.batteryHealth(80) == .normal)
+        #expect(Levels.batteryHealth(79) == .high)
+    }
+
     @Test func anythingButAnInternalBatteryIsIgnored() {
         #expect(BatteryMath.reading(from: source([kIOPSTypeKey: "UPS"])) == nil)
         #expect(BatteryMath.reading(from: source([kIOPSMaxCapacityKey: 0])) == nil)

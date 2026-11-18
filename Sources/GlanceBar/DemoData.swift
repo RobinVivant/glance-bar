@@ -22,7 +22,7 @@ enum DemoData {
     static var detail: Detail {
         Detail(cores: [0.62, 0.55, 0.48, 0.41, 0.36, 0.22, 0.31, 0.12, 0.09, 0.05], gpuTemperature: 52,
                batteryTemperature: 31, storageTemperature: 38, swapUsed: 1_300_000_000, loadAverage: 3.42,
-               uptime: 3 * 86_400 + 9 * 3600, batteryHealth: BatteryHealth(cycles: 212),
+               uptime: 3 * 86_400 + 9 * 3600, batteryHealth: BatteryHealth(cycles: 212, capacity: 91),
                interface: "en0", address: "192.168.1.20",
                networkTotals: InterfaceCounters(received: 48_200_000_000, sent: 6_100_000_000),
                appCPU: 0.011, appMemory: 31 << 20)

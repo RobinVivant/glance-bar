@@ -18,14 +18,39 @@ public enum BatteryMath {
         return BatteryReading(percent: min(100, max(0, percent)), charging: charging, onAC: onAC,
                               minutesLeft: estimate)
     }
+
+    /// The registry keys `health(from:)` looks at.
+    public static let healthKeys = ["CycleCount", "DesignCapacity", "NominalChargeCapacity", "AppleRawMaxCapacity",
+                                    "BatteryData"]
+
+    /// Properties of the `AppleSmartBattery` registry entry. macOS 27 moved the capacities from
+    /// the entry itself into its `BatteryData` dictionary, so both places are read.
+    public static func health(from properties: [String: Any]) -> BatteryHealth? {
+        guard let cycles = (properties["CycleCount"] as? NSNumber)?.intValue else { return nil }
+        let data = properties["BatteryData"] as? [String: Any] ?? [:]
+        func capacity(_ key: String) -> Double? {
+            ((properties[key] ?? data[key]) as? NSNumber).flatMap { $0.doubleValue > 0 ? $0.doubleValue : nil }
+        }
+        // The nominal capacity is the one behind Maximum Capacity in System Settings. The raw
+        // one moves with every charge and reads a few points lower.
+        guard let design = capacity("DesignCapacity"),
+              let full = capacity("NominalChargeCapacity") ?? capacity("AppleRawMaxCapacity") else {
+            return BatteryHealth(cycles: cycles)
+        }
+        // A new battery holds a little more than its design capacity.
+        return BatteryHealth(cycles: cycles, capacity: min(100, Int((full / design * 100).rounded())))
+    }
 }
 
 /// Battery wear, read only while the panel is open.
 public struct BatteryHealth: Equatable, Sendable {
     public var cycles: Int
+    /// What a full charge holds, in percent of what it held when new.
+    public var capacity: Int?
 
-    public init(cycles: Int) {
+    public init(cycles: Int, capacity: Int? = nil) {
         self.cycles = cycles
+        self.capacity = capacity
     }
 }
 
@@ -46,10 +71,11 @@ public enum BatterySampler {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
         guard service != 0 else { return nil }
         defer { IOObjectRelease(service) }
-        func number(_ key: String) -> Int? {
-            (IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?
-                .takeRetainedValue() as? NSNumber)?.intValue
+        var properties: [String: Any] = [:]
+        for key in BatteryMath.healthKeys {
+            properties[key] = IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue()
         }
-        return number("CycleCount").map(BatteryHealth.init)
+        return BatteryMath.health(from: properties)
     }
 }

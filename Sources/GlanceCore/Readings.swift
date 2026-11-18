@@ -131,4 +131,9 @@ public enum Levels {
         guard !battery.onAC else { return .normal }
         return battery.percent <= 10 ? .critical : battery.percent <= 20 ? .high : .normal
     }
+
+    /// Below 80% of its original capacity, Apple counts a battery as worn.
+    public static func batteryHealth(_ capacity: Int) -> Level {
+        capacity < 80 ? .high : .normal
+    }
 }
