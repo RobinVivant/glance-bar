@@ -15,10 +15,12 @@ public enum ChartProbe {
         return index >= 0 && index < count ? index : nil
     }
 
-    /// Seconds since the value at `index` was read, with one reading every `interval` seconds. It
-    /// assumes the readings were taken at today's interval, without a pause for a sleeping display.
-    public static func age(index: Int, count: Int, interval: Int) -> Int {
-        max(0, count - 1 - index) * max(0, interval)
+    /// Whole seconds between the reading at `index` and the newest one, from the times the
+    /// readings were taken, oldest first. A changed refresh interval or a pause while the displays
+    /// slept shows up as it happened. Nil when there is no reading at `index`.
+    public static func age(index: Int, times: [Float]) -> Int? {
+        guard times.indices.contains(index), let newest = times.last else { return nil }
+        return max(0, Int((newest - times[index]).rounded()))
     }
 }
 

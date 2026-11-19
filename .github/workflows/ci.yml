@@ -28,6 +28,8 @@ jobs:
           swift --version
       - name: Test
         run: swift test
+      - name: Check the System Settings panes the panel links to
+        run: .github/scripts/check-settings-panes.sh
       - name: Build and package the app
         run: scripts/package-release.sh
       - name: Render the demo snapshots
