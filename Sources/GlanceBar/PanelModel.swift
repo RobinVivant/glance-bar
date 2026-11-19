@@ -34,7 +34,14 @@ final class PanelModel {
     var upHistory: [Float]
     var downHistory: [Float]
     var settings: BarSettings
-    var showingSettings = false
+    /// A view that goes away under the pointer never reports that the pointer left it, so switching
+    /// screens forgets what was under it.
+    var showingSettings = false {
+        didSet {
+            hovered = nil
+            probe = nil
+        }
+    }
     private(set) var hovered: PanelTarget?
     private(set) var probe: Probe?
     /// True for a moment after a click copied the network address.

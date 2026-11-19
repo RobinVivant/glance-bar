@@ -15,7 +15,8 @@ public enum ChartProbe {
         return index >= 0 && index < count ? index : nil
     }
 
-    /// Seconds since the value at `index` was read, with one reading every `interval` seconds.
+    /// Seconds since the value at `index` was read, with one reading every `interval` seconds. It
+    /// assumes the readings were taken at today's interval, without a pause for a sleeping display.
     public static func age(index: Int, count: Int, interval: Int) -> Int {
         max(0, count - 1 - index) * max(0, interval)
     }
