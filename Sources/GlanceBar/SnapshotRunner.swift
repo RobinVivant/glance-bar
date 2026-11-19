@@ -23,6 +23,12 @@ enum SnapshotRunner {
             let suffix = scheme == .dark ? "dark" : "light"
             panel.showingSettings = false
             await render(panel, scheme: scheme, to: directory.appendingPathComponent("panel-\(suffix).png"))
+            // The panel with the pointer on a column of the CPU history.
+            panel.hover(.cpu, true)
+            panel.point(at: .cpuHistory(slot: 35), true)
+            await render(panel, scheme: scheme, to: directory.appendingPathComponent("panel-hover-\(suffix).png"))
+            panel.point(at: .cpuHistory(slot: 35), false)
+            panel.hover(.cpu, false)
             panel.showingSettings = true
             await render(panel, scheme: scheme, to: directory.appendingPathComponent("settings-\(suffix).png"))
         }

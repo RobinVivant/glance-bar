@@ -77,7 +77,9 @@ swift run GlanceBar --demo
 
 ## What it shows
 
-- **Menu bar**: seven meters, each of which you can hide or reorder.
+- **Menu bar**: seven meters, each of which you can hide or reorder. Rest the pointer on the
+  item for a tooltip that gives every visible reading as text, including the figures behind the
+  gauges.
 
     | Meter | Drawn as | Reading |
     |-------|----------|---------|
@@ -106,9 +108,29 @@ swift run GlanceBar --demo
   space, battery time, health and cycle count, and the CPU, GPU, SSD and battery temperatures.
   Battery health is what a full charge holds as a share of the design capacity, the figure macOS
   calls Maximum Capacity. The footer shows what Glance Bar itself uses.
+- **Pointing and clicking in the panel**: a part lights up under the pointer when a click does
+  something. A figure with more behind it explains itself in a tooltip.
+
+    | Part | Under the pointer | A click |
+    |------|-------------------|---------|
+    | CPU history and network chart | The reading of that column and how long ago it was taken | Opens Activity Monitor or Network settings, as the rest of the card does |
+    | Core bars | The core's number, its kind and its load | Opens Activity Monitor |
+    | Memory bar and its legend | What app, wired or compressed memory is, and its share of the total | Opens Activity Monitor |
+    | CPU, GPU and memory tiles | What the figures mean | Opens Activity Monitor |
+    | Network address | | Copies the address |
+    | Disk card | How free space is counted | Opens Storage settings |
+    | Battery card | What health means | Opens Battery settings |
+    | Temperatures | Which sensors a figure comes from | |
+    | Chip name in the header | | Opens About in System Settings |
+    | Refresh interval in the footer | | Opens the settings |
+
+    <p align="center">
+      <img src="docs/screenshots/panel-hover-dark.png" width="38%" alt="Detail panel with the pointer on a column of the CPU history: the card is lit, the column stands out and the caption reads 55 percent, 48 seconds ago">
+    </p>
+
 - **Settings** (the gear in the panel): a switch and order arrows per meter, the refresh interval
   (1, 2, 3 or 5 seconds, 2 by default), Open at Login, Activity Monitor and Quit.
-- **Right click**: Open Activity Monitor and Quit.
+- **Right click**: Open Activity Monitor, Settings and Quit.
 
 ## What it costs
 
@@ -154,7 +176,8 @@ What keeps it low:
 | Disk | Volume capacity of `/`, counting the space macOS can free on demand |
 
 Settings live in the app's user defaults (`local.glance-bar`). The app writes no other file and
-opens no network connection.
+opens no network connection. A click on the network address in the panel puts that address on
+the clipboard.
 
 The temperature sensor keys differ per chip generation. The M1 list is checked on real
 hardware, where its average matches the CPU temperature iStat Menus shows. The lists for M2 to
