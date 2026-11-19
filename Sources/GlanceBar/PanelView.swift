@@ -24,10 +24,18 @@ struct PanelView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(model.showingSettings ? "Settings" : model.machine.chip)
-                    .font(.system(size: 13, weight: .semibold))
-                Text(model.showingSettings ? "Glance Bar \(Self.version)" : subtitle).caption()
+            if model.showingSettings {
+                title("Settings", "Glance Bar \(Self.version)")
+            } else {
+                Button {
+                    Actions.open(.about)
+                } label: {
+                    title(model.machine.chip, subtitle)
+                }
+                .buttonStyle(.plain)
+                .hoverBackdrop(outset: 5, corner: 7)
+                .pointerStyle(.link)
+                .help("Open About in System Settings")
             }
             Spacer(minLength: 0)
             Button {
@@ -36,6 +44,7 @@ struct PanelView: View {
                 Image(systemName: "chart.bar.xaxis")
             }
             .buttonStyle(.borderless)
+            .hoverBackdrop()
             .help("Open Activity Monitor")
             Button {
                 model.showingSettings.toggle()
@@ -43,7 +52,15 @@ struct PanelView: View {
                 Image(systemName: model.showingSettings ? "xmark" : "gearshape")
             }
             .buttonStyle(.borderless)
+            .hoverBackdrop()
             .help(model.showingSettings ? "Back to the readings" : "Settings")
+        }
+    }
+
+    private func title(_ name: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(name).font(.system(size: 13, weight: .semibold))
+            Text(detail).caption()
         }
     }
 
@@ -78,98 +95,242 @@ struct PanelView: View {
     private var tiles: some View {
         let snapshot = model.snapshot
         return HStack(spacing: 8) {
-            StatTile(value: snapshot.cpu.map { Format.percent($0.total) } ?? "–", label: "CPU",
-                     color: Palette.level(snapshot.cpu.map { Levels.load($0.total) } ?? .normal, normal: .primary),
-                     detail: model.detail.loadAverage.map { String(format: "load %.2f", $0) } ?? " ")
-            StatTile(value: snapshot.gpu.map(Format.percent) ?? "–", label: "GPU",
-                     color: Palette.level(snapshot.gpu.map(Levels.load) ?? .normal, normal: .primary),
-                     detail: model.detail.gpuTemperature.map { Format.degrees($0) } ?? " ")
-            StatTile(value: snapshot.memory.map { Format.percent($0.usedFraction) } ?? "–", label: "memory",
-                     color: Palette.level(snapshot.memory?.pressure ?? .normal, normal: .primary),
-                     detail: snapshot.memory.map { "\(Format.memory($0.used)) used" } ?? " ")
+            interactive(.cpuTile, opens: "Activity Monitor", action: Actions.openActivityMonitor,
+                        help: "CPU load now. \"load\" is the load average of the last minute: how many "
+                            + "processes ran or waited for a core.") {
+                StatTile(value: snapshot.cpu.map { Format.percent($0.total) } ?? "–", label: "CPU",
+                         color: Palette.level(snapshot.cpu.map { Levels.load($0.total) } ?? .normal, normal: .primary),
+                         detail: model.detail.loadAverage.map { String(format: "load %.2f", $0) } ?? " ",
+                         highlighted: model.hovered == .cpuTile)
+            }
+            interactive(.gpuTile, opens: "Activity Monitor", action: Actions.openActivityMonitor,
+                        help: "Utilization of the busiest GPU, and the GPU temperature.") {
+                StatTile(value: snapshot.gpu.map(Format.percent) ?? "–", label: "GPU",
+                         color: Palette.level(snapshot.gpu.map(Levels.load) ?? .normal, normal: .primary),
+                         detail: model.detail.gpuTemperature.map { Format.degrees($0) } ?? " ",
+                         highlighted: model.hovered == .gpuTile)
+            }
+            interactive(.memoryTile, opens: "Activity Monitor", action: Actions.openActivityMonitor,
+                        help: "Memory in use: app, wired and compressed memory as a share of the total.") {
+                StatTile(value: snapshot.memory.map { Format.percent($0.usedFraction) } ?? "–", label: "memory",
+                         color: Palette.level(snapshot.memory?.pressure ?? .normal, normal: .primary),
+                         detail: snapshot.memory.map { "\(Format.memory($0.used)) used" } ?? " ",
+                         highlighted: model.hovered == .memoryTile)
+            }
         }
+    }
+
+    /// A tile or card that lights up under the pointer and opens the matching system tool on a
+    /// click. Controls inside it keep their own clicks.
+    private func interactive(_ target: PanelTarget, opens destination: String, action: @escaping () -> Void,
+                             help: String? = nil, @ViewBuilder content: () -> some View) -> some View {
+        let hint = "Click to open \(destination)."
+        return content()
+            .contentShape(RoundedRectangle(cornerRadius: Surface.corner, style: .continuous))
+            .onHover { model.hover(target, $0) }
+            .onTapGesture(perform: action)
+            .pointerStyle(.link)
+            .help(help.map { "\($0) \(hint)" } ?? hint)
+            .accessibilityAction(named: Text("Open \(destination)"), action)
+            .animation(.easeOut(duration: 0.12), value: model.hovered == target)
     }
 
     // MARK: Cards
 
     private var cpuCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("CPU").sectionTitle()
-                    Spacer()
-                    if let cpu = model.snapshot.cpu {
-                        Text("user \(Format.percent(cpu.user)) · system \(Format.percent(cpu.system))").caption()
+        let probed = probedIndex(of: model.cpuHistory.count) {
+            if case .cpuHistory(let slot) = $0 { slot } else { nil }
+        }
+        let cores = model.detail.cores
+        let core: Int? = if case .core(let index) = model.probe, cores.indices.contains(index) {
+            index
+        } else {
+            nil
+        }
+        return interactive(.cpu, opens: "Activity Monitor", action: Actions.openActivityMonitor) {
+            Card(highlighted: model.hovered == .cpu) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("CPU").sectionTitle()
+                        Spacer()
+                        if let probed {
+                            readout("\(Format.percent(Double(model.cpuHistory[probed.index]))) · "
+                                + age(of: probed.index, in: model.cpuHistory.count))
+                        } else if let core {
+                            readout(Format.core(core, efficiency: model.machine.efficiencyCores, total: cores.count)
+                                + " · \(Format.percent(cores[core]))")
+                        } else if let cpu = model.snapshot.cpu {
+                            Text("user \(Format.percent(cpu.user)) · system \(Format.percent(cpu.system))").caption()
+                        }
                     }
-                }
-                HistoryChart(values: model.cpuHistory, slots: Monitor.historyLength, color: Palette.cpu)
+                    HistoryChart(values: model.cpuHistory, slots: Monitor.historyLength, color: Palette.cpu,
+                                 highlight: probed?.slot) { slot in
+                        probe(slot.map(Probe.cpuHistory)) { if case .cpuHistory = $0 { true } else { false } }
+                    }
                     .frame(height: 40)
-                if !model.detail.cores.isEmpty {
-                    CoreBars(cores: model.detail.cores, efficiency: model.machine.efficiencyCores)
+                    if !cores.isEmpty {
+                        CoreBars(cores: cores, efficiency: model.machine.efficiencyCores,
+                                 highlight: core) { index, inside in
+                            model.point(at: .core(index), inside)
+                        }
+                    }
                 }
             }
         }
+    }
+
+    // MARK: Readouts
+
+    /// The column a chart has under the pointer and the value it draws there, if it draws one.
+    private func probedIndex(of count: Int, slot: (Probe) -> Int?) -> (slot: Int, index: Int)? {
+        guard let slot = model.probe.flatMap(slot),
+              let index = ChartProbe.index(slot: slot, slots: Monitor.historyLength, count: count) else { return nil }
+        return (slot, index)
+    }
+
+    /// A chart reports the column under the pointer, or nil when the pointer left it.
+    private func probe(_ probe: Probe?, ownedBy chart: (Probe) -> Bool) {
+        if let probe {
+            model.point(at: probe, true)
+        } else {
+            model.stopProbing(where: chart)
+        }
+    }
+
+    private func age(of index: Int, in count: Int) -> String {
+        Format.ago(ChartProbe.age(index: index, count: count, interval: model.settings.interval))
+    }
+
+    /// What is under the pointer, in place of a card's usual caption.
+    private func readout(_ text: String) -> some View {
+        Text(text).font(.system(size: 10.5, weight: .medium)).foregroundStyle(.primary).monospacedDigit()
     }
 
     private func memoryCard(_ memory: MemoryReading) -> some View {
         let total = Double(max(1, memory.total))
-        return Card {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Text("Memory").sectionTitle()
-                    Pill(text: "pressure \(Format.percent(memory.pressureFraction))",
-                         color: Palette.level(memory.pressure, normal: Palette.ok))
-                    Spacer()
-                    Text("\(Format.memory(memory.used)) of \(Format.memory(memory.total))").caption()
+        let parts: [MemoryPart] = [.app, .wired, .compressed]
+        let probed: MemoryPart? = if case .memory(let part) = model.probe { part } else { nil }
+        return interactive(.memory, opens: "Activity Monitor", action: Actions.openActivityMonitor) {
+            Card(highlighted: model.hovered == .memory) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Text("Memory").sectionTitle()
+                        Pill(text: "pressure \(Format.percent(memory.pressureFraction))",
+                             color: Palette.level(memory.pressure, normal: Palette.ok))
+                            .help("Memory pressure: the share of memory macOS can no longer hand out freely. "
+                                + "The color is the kernel's own verdict: green, then orange, then red.")
+                        Spacer()
+                        Text("\(Format.memory(memory.used)) of \(Format.memory(memory.total))").caption()
+                    }
+                    CapsuleBar(parts: [(Double(memory.app) / total, Palette.memory),
+                                       (Double(memory.wired) / total, Palette.wired),
+                                       (Double(memory.compressed) / total, Palette.compressed)],
+                               highlight: probed.flatMap(parts.firstIndex)) { index, inside in
+                        model.point(at: .memory(parts[index]), inside)
+                    }
+                    HStack(spacing: 10) {
+                        legend(.app, "App", Format.memory(memory.app), Palette.memory, probed)
+                        legend(.wired, "Wired", Format.memory(memory.wired), Palette.wired, probed)
+                        legend(.compressed, "Compressed", Format.memory(memory.compressed), Palette.compressed, probed)
+                        Spacer(minLength: 0)
+                    }
+                    if let probed {
+                        Text(Self.explanation(of: probed, in: memory))
+                            .font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit()
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                    } else {
+                        Text("Cached files \(Format.memory(memory.cached))"
+                            + (model.detail.swapUsed.map { " · swap \(Format.memory($0))" } ?? ""))
+                            .font(.system(size: 10)).foregroundStyle(.tertiary).monospacedDigit()
+                            .help("Cached files are recently used data that macOS hands back to apps on demand. "
+                                + "Swap is memory moved to the startup disk.")
+                    }
                 }
-                CapsuleBar(parts: [(Double(memory.app) / total, Palette.memory),
-                                   (Double(memory.wired) / total, Palette.wired),
-                                   (Double(memory.compressed) / total, Palette.compressed)])
-                HStack(spacing: 10) {
-                    legend("App", Format.memory(memory.app), Palette.memory)
-                    legend("Wired", Format.memory(memory.wired), Palette.wired)
-                    legend("Compressed", Format.memory(memory.compressed), Palette.compressed)
-                    Spacer(minLength: 0)
-                }
-                Text("Cached files \(Format.memory(memory.cached))"
-                    + (model.detail.swapUsed.map { " · swap \(Format.memory($0))" } ?? ""))
-                    .font(.system(size: 10)).foregroundStyle(.tertiary).monospacedDigit()
             }
         }
     }
 
-    private func legend(_ name: String, _ value: String, _ color: Color) -> some View {
+    private func legend(_ part: MemoryPart, _ name: String, _ value: String, _ color: Color,
+                        _ probed: MemoryPart?) -> some View {
         HStack(spacing: 4) {
             Circle().fill(color).frame(width: 6, height: 6)
             Text("\(name) \(value)").caption().lineLimit(1)
+                .foregroundStyle(probed == part ? .primary : .secondary)
+        }
+        .opacity(probed == nil || probed == part ? 1 : Fade.others + 0.2)
+        .contentShape(Rectangle().inset(by: -3))
+        .onHover { model.point(at: .memory(part), $0) }
+    }
+
+    private static func explanation(of part: MemoryPart, in memory: MemoryReading) -> String {
+        func share(_ bytes: UInt64) -> String { Format.percent(Double(bytes) / Double(max(1, memory.total))) }
+        return switch part {
+        case .app: "App memory · \(share(memory.app)) · used by apps and their processes"
+        case .wired: "Wired · \(share(memory.wired)) · stays in RAM, never compressed or swapped"
+        case .compressed: "Compressed · \(share(memory.compressed)) · squeezed to make room for more"
         }
     }
 
     private var networkCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Network").sectionTitle()
-                    Spacer()
-                    if let interface = model.detail.interface, let address = model.detail.address {
-                        Text("\(interface) · \(address)").caption()
+        // Upload and download are appended together, so one index serves both.
+        let count = min(model.downHistory.count, model.upHistory.count)
+        let probed = probedIndex(of: count) { if case .network(let slot) = $0 { slot } else { nil } }
+        return interactive(.network, opens: "Network settings", action: { Actions.open(.network) }) {
+            Card(highlighted: model.hovered == .network) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Network").sectionTitle()
+                        Spacer()
+                        if let probed {
+                            let down = model.downHistory[model.downHistory.count - count + probed.index]
+                            let up = model.upHistory[model.upHistory.count - count + probed.index]
+                            readout("↓ \(Format.rate(Double(down)))  ↑ \(Format.rate(Double(up))) · "
+                                + age(of: probed.index, in: count))
+                        } else if let interface = model.detail.interface, let address = model.detail.address {
+                            addressButton(interface, address)
+                        }
                     }
-                }
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        rate("arrow.down", model.snapshot.network?.down, Palette.download)
-                        rate("arrow.up", model.snapshot.network?.up, Palette.upload)
-                    }
-                    .frame(width: 92, alignment: .leading)
-                    NetworkChart(down: model.downHistory, up: model.upHistory, slots: Monitor.historyLength)
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            rate("arrow.down", model.snapshot.network?.down, Palette.download)
+                            rate("arrow.up", model.snapshot.network?.up, Palette.upload)
+                        }
+                        .frame(width: 92, alignment: .leading)
+                        NetworkChart(down: model.downHistory, up: model.upHistory, slots: Monitor.historyLength,
+                                     highlight: probed?.slot) { slot in
+                            probe(slot.map(Probe.network)) { if case .network = $0 { true } else { false } }
+                        }
                         .frame(height: 36)
-                }
-                if let totals = model.detail.networkTotals {
-                    Text("Since boot: \(Format.storage(totals.received)) down · \(Format.storage(totals.sent)) up")
-                        .font(.system(size: 10)).foregroundStyle(.tertiary).monospacedDigit()
+                    }
+                    if let totals = model.detail.networkTotals {
+                        Text("Since boot: \(Format.storage(totals.received)) down · \(Format.storage(totals.sent)) up")
+                            .font(.system(size: 10)).foregroundStyle(.tertiary).monospacedDigit()
+                            .help("Traffic over the en* interfaces since the Mac started.")
+                    }
                 }
             }
         }
+    }
+
+    /// The interface and its address. A click copies the address.
+    private func addressButton(_ interface: String, _ address: String) -> some View {
+        Button {
+            model.copyAddress()
+        } label: {
+            if model.addressCopied {
+                HStack(spacing: 3) {
+                    Image(systemName: "checkmark").font(.system(size: 8, weight: .bold))
+                    Text("Copied").font(.system(size: 10.5, weight: .medium))
+                }
+                .foregroundStyle(Palette.ok)
+            } else {
+                Text("\(interface) · \(address)").caption()
+            }
+        }
+        .buttonStyle(.plain)
+        .hoverBackdrop(outset: 3, corner: 4)
+        .pointerStyle(.link)
+        .help("Copy the address")
     }
 
     private func rate(_ symbol: String, _ value: Double?, _ color: Color) -> some View {
@@ -184,43 +345,44 @@ struct PanelView: View {
 
     private func diskCard(_ disk: DiskReading) -> some View {
         let level = Levels.disk(disk.usedFraction)
-        return Card {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Disk").sectionTitle()
-                    Spacer()
-                    Text(Format.percent(disk.usedFraction)).caption()
+        return interactive(.disk, opens: "Storage settings", action: { Actions.open(.storage) },
+                           help: "The startup volume. Free space counts what macOS can clear on demand.") {
+            Card(highlighted: model.hovered == .disk) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Disk").sectionTitle()
+                        Spacer()
+                        Text(Format.percent(disk.usedFraction)).caption()
+                    }
+                    CapsuleBar(used: disk.usedFraction, color: Palette.level(level, normal: Palette.disk))
+                    Text("\(Format.storage(disk.free)) free of \(Format.storage(disk.total))").caption().lineLimit(1)
                 }
-                CapsuleBar(used: disk.usedFraction, color: Palette.level(level, normal: Palette.disk))
-                Text("\(Format.storage(disk.free)) free of \(Format.storage(disk.total))").caption().lineLimit(1)
+                .frame(maxHeight: .infinity, alignment: .top)
             }
-            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
     private func batteryCard(_ battery: BatteryReading) -> some View {
         let level = Levels.battery(battery)
-        return Card {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Battery").sectionTitle()
-                    Spacer()
-                    Text("\(battery.percent)%").caption()
+        return interactive(.battery, opens: "Battery settings", action: { Actions.open(.battery) }) {
+            Card(highlighted: model.hovered == .battery) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Battery").sectionTitle()
+                        Spacer()
+                        Text("\(battery.percent)%").caption()
+                    }
+                    CapsuleBar(used: Double(battery.percent) / 100, color: Palette.level(level, normal: Palette.ok))
+                    Text(Format.batteryState(battery)).caption().lineLimit(1)
+                    if let health = model.detail.batteryHealth {
+                        Self.batteryHealth(health).caption().lineLimit(1)
+                            .help("Health is what a full charge holds as a share of the design capacity, the "
+                                + "figure macOS calls Maximum Capacity. Below 80% the battery counts as worn.")
+                    }
                 }
-                CapsuleBar(used: Double(battery.percent) / 100, color: Palette.level(level, normal: Palette.ok))
-                Text(Self.batteryState(battery)).caption().lineLimit(1)
-                if let health = model.detail.batteryHealth { Self.batteryHealth(health).caption().lineLimit(1) }
+                .frame(maxHeight: .infinity, alignment: .top)
             }
-            .frame(maxHeight: .infinity, alignment: .top)
         }
-    }
-
-    private static func batteryState(_ battery: BatteryReading) -> String {
-        if battery.charging {
-            return battery.minutesLeft.map { "full in \(Format.duration(TimeInterval($0 * 60)))" } ?? "charging"
-        }
-        if battery.onAC { return "on power" }
-        return battery.minutesLeft.map { "\(Format.duration(TimeInterval($0 * 60))) left" } ?? "on battery"
     }
 
     /// The capacity turns amber once the battery counts as worn.
@@ -254,6 +416,8 @@ struct PanelView: View {
                                     Text(name).font(.system(size: 9.5)).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 .frame(maxWidth: .infinity)
+                                .hoverBackdrop(outset: 3, corner: 6)
+                                .help(Self.temperatureSources[name] ?? "")
                             }
                         }
                     }
@@ -262,15 +426,35 @@ struct PanelView: View {
         }
     }
 
+    /// Where each temperature comes from, by the name under its figure. Orange starts at 90°, red at 100°.
+    private static let temperatureSources = [
+        "CPU": "Average of the CPU core sensors. Orange from 90°, red from 100°.",
+        "hottest core": "The warmest of the CPU core sensors.",
+        "GPU": "Average of the GPU sensors.",
+        "SSD": "The storage sensor.",
+        "battery": "The battery sensor.",
+    ]
+
     // MARK: Footer
 
     private var footer: some View {
         HStack(spacing: 6) {
-            Circle().fill(Palette.ok).frame(width: 6, height: 6)
-            Text(model.monitor.demo ? "Demo readings" : "Every \(model.settings.interval) s")
+            Button {
+                model.showingSettings = true
+            } label: {
+                HStack(spacing: 6) {
+                    Circle().fill(Palette.ok).frame(width: 6, height: 6)
+                    Text(model.monitor.demo ? "Demo readings" : "Every \(model.settings.interval) s")
+                }
+            }
+            .buttonStyle(.plain)
+            .hoverBackdrop(outset: 4, corner: 5)
+            .pointerStyle(.link)
+            .help("Change the refresh interval in the settings")
             Spacer(minLength: 0)
             if let cpu = model.detail.appCPU, let memory = model.detail.appMemory {
                 Text("Glance Bar uses \(String(format: "%.1f", cpu * 100))% CPU · \(Format.memory(memory))")
+                    .help("Glance Bar's share of one core, averaged since it started, and its memory footprint.")
             }
         }
         .font(.system(size: 10.5))

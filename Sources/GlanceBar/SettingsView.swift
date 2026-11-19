@@ -97,5 +97,6 @@ struct SettingsView: View {
                 .padding(.leading, 4)
         }
         .buttonStyle(.borderless)
+        .hoverBackdrop(outset: 3, corner: 6)
     }
 }

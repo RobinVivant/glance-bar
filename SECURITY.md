@@ -19,7 +19,7 @@ only supported version; there are no release branches.
 - A way to make the app write to the System Management Controller, or to any file other than its
   own user defaults (`local.glance-bar`).
 - A way to make the app open a network connection, or start any program other than Activity
-  Monitor, which its menu opens.
+  Monitor and System Settings, which a click in its panel or its menu opens.
 - A way for [`scripts/get.sh`](scripts/get.sh) to install something other than the release it
   downloaded and checked.
 
@@ -32,7 +32,9 @@ A report about macOS, its sensors or the drivers behind them belongs to Apple.
 - It reads CPU, memory, GPU, network, battery and disk figures from the kernel and from IOKit,
   all of them readable by any process of the user.
 - It registers itself as a login item when you turn on Open at Login, and stores its settings in
-  its user defaults. It writes nothing else.
+  its user defaults. It writes no other file.
+- A click on the network address in the panel copies that address to the clipboard. The app never
+  reads the clipboard.
 - It has no telemetry, no update check and no other network call.
 - The release build is signed ad hoc and not notarized by Apple. The install script checks the
   download against the SHA-256 file published with the release and verifies the signature

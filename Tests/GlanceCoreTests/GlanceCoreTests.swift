@@ -613,3 +613,112 @@ import Testing
         #expect(reading.free <= reading.total)
     }
 }
+
+@Suite struct ProbeTests {
+    @Test func aPointMapsToItsColumn() {
+        #expect(ChartProbe.slot(at: 0, width: 300, slots: 60) == 0)
+        #expect(ChartProbe.slot(at: 4.9, width: 300, slots: 60) == 0)
+        #expect(ChartProbe.slot(at: 5, width: 300, slots: 60) == 1)
+        #expect(ChartProbe.slot(at: 299.9, width: 300, slots: 60) == 59)
+    }
+
+    @Test func aPointOutsideTheChartHasNoColumn() {
+        #expect(ChartProbe.slot(at: -0.1, width: 300, slots: 60) == nil)
+        #expect(ChartProbe.slot(at: 300, width: 300, slots: 60) == nil)
+        #expect(ChartProbe.slot(at: 10, width: 0, slots: 60) == nil)
+        #expect(ChartProbe.slot(at: 10, width: 300, slots: 0) == nil)
+    }
+
+    @Test func aFullChartMapsEveryColumnToAValue() {
+        #expect(ChartProbe.index(slot: 0, slots: 60, count: 60) == 0)
+        #expect(ChartProbe.index(slot: 59, slots: 60, count: 60) == 59)
+    }
+
+    @Test func aChartThatIsFillingUpKeepsItsValuesOnTheRight() {
+        #expect(ChartProbe.index(slot: 59, slots: 60, count: 5) == 4)
+        #expect(ChartProbe.index(slot: 55, slots: 60, count: 5) == 0)
+        #expect(ChartProbe.index(slot: 54, slots: 60, count: 5) == nil)
+        #expect(ChartProbe.index(slot: 59, slots: 60, count: 0) == nil)
+        #expect(ChartProbe.index(slot: 60, slots: 60, count: 60) == nil)
+    }
+
+    @Test func theNewestValueIsZeroSecondsOld() {
+        #expect(ChartProbe.age(index: 59, count: 60, interval: 2) == 0)
+        #expect(ChartProbe.age(index: 35, count: 60, interval: 2) == 48)
+        #expect(ChartProbe.age(index: 0, count: 60, interval: 5) == 295)
+    }
+
+    static let agoCases: [(Int, String)] = [(0, "now"), (-3, "now"), (48, "48 s ago"), (60, "1m 00s ago"),
+                                            (96, "1m 36s ago"), (295, "4m 55s ago")]
+
+    @Test(arguments: agoCases)
+    func ages(seconds: Int, text: String) {
+        #expect(Format.ago(seconds) == text)
+    }
+
+    @Test func aCoreIsNamedByItsNumberAndKind() {
+        #expect(Format.core(0, efficiency: 2, total: 10) == "Core 1 · efficiency")
+        #expect(Format.core(1, efficiency: 2, total: 10) == "Core 2 · efficiency")
+        #expect(Format.core(2, efficiency: 2, total: 10) == "Core 3 · performance")
+        #expect(Format.core(9, efficiency: 2, total: 10) == "Core 10 · performance")
+    }
+
+    @Test func aMacWithOneKindOfCoreGetsTheNumberAlone() {
+        #expect(Format.core(3, efficiency: 0, total: 8) == "Core 4")
+        #expect(Format.core(3, efficiency: 8, total: 8) == "Core 4")
+    }
+
+    static let batteryCases: [(BatteryReading, String)] = [
+        (BatteryReading(percent: 84, charging: false, onAC: false, minutesLeft: 312), "5h 12m left"),
+        (BatteryReading(percent: 84, charging: false, onAC: false), "on battery"),
+        (BatteryReading(percent: 60, charging: true, onAC: true, minutesLeft: 42), "full in 42m"),
+        (BatteryReading(percent: 60, charging: true, onAC: true), "charging"),
+        (BatteryReading(percent: 100, charging: false, onAC: true), "on power"),
+    ]
+
+    @Test(arguments: batteryCases)
+    func batteryStates(battery: BatteryReading, text: String) {
+        #expect(Format.batteryState(battery) == text)
+    }
+}
+
+@Suite struct BarSummaryTests {
+    static var snapshot: Snapshot {
+        var snapshot = Snapshot()
+        snapshot.cpu = CPULoad(user: 0.27, system: 0.09)
+        snapshot.gpu = 0.18
+        snapshot.memory = MemoryReading(total: 64 << 30, app: 27 << 30, wired: 5 << 30, compressed: 6 << 30,
+                                        cached: 14 << 30, pressure: .normal, pressureFraction: 0.24)
+        snapshot.temperature = CPUTemperature(average: 58, hottest: 67)
+        snapshot.battery = BatteryReading(percent: 84, charging: false, onAC: false, minutesLeft: 312)
+        snapshot.network = NetworkRates(up: 184_000, down: 2_400_000)
+        snapshot.disk = DiskReading(total: 994_000_000_000, free: 412_000_000_000)
+        return snapshot
+    }
+
+    @Test func everyMeterGetsALineWithItsFigures() {
+        #expect(BarSummary.lines(snapshot: Self.snapshot, visible: Meter.allCases) == [
+            "CPU 36%: user 27%, system 9%",
+            "GPU 18%",
+            "Memory pressure 24%, 38 GB of 64 GB used",
+            "Disk 59% used, 412 GB free",
+            "CPU 58°, hottest core 67°",
+            "Battery 84%, 5h 12m left",
+            "Network up 184 KB/s, down 2.4 MB/s",
+        ])
+    }
+
+    @Test func theLinesFollowTheOrderOfTheMenuBar() {
+        #expect(BarSummary.lines(snapshot: Self.snapshot, visible: [.battery, .gpu]) == ["Battery 84%, 5h 12m left",
+                                                                                         "GPU 18%"])
+    }
+
+    @Test func aMeterWithoutAReadingIsLeftOut() {
+        var snapshot = Self.snapshot
+        snapshot.battery = nil
+        snapshot.gpu = nil
+        #expect(BarSummary.lines(snapshot: snapshot, visible: [.battery, .gpu, .disk])
+            == ["Disk 59% used, 412 GB free"])
+        #expect(BarSummary.lines(snapshot: Snapshot(), visible: Meter.allCases).isEmpty)
+    }
+}

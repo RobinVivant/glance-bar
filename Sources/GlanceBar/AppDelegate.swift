@@ -4,7 +4,7 @@ import ServiceManagement
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSViewToolTipOwner {
     let monitor: Monitor
     private var statusItem: NSStatusItem!
     private let barView = BarView()
@@ -55,9 +55,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         if width != itemWidth {
             itemWidth = width
             statusItem.length = width
+            coverWithToolTip(width: width)
         }
         barView.content = content
         panel?.refresh()
+    }
+
+    /// The tooltip covers the item at its current width. Its text is asked for only when the
+    /// pointer rests on the item, so it costs nothing per tick.
+    private func coverWithToolTip(width: CGFloat) {
+        guard let button = statusItem.button else { return }
+        button.removeAllToolTips()
+        button.addToolTip(NSRect(x: 0, y: 0, width: width, height: NSStatusBar.system.thickness), owner: self,
+                          userData: nil)
+    }
+
+    func view(_ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint,
+              userData data: UnsafeMutableRawPointer?) -> String {
+        // A meter shows in the item only when it has a reading, so the lines match what is drawn.
+        let lines = BarSummary.lines(snapshot: monitor.snapshot, visible: monitor.settings.visible)
+        return (lines + ["Click for details, right-click for the menu"]).joined(separator: "\n")
     }
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
@@ -72,9 +89,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// The panel is built when it opens and dropped when it closes: between
     /// clicks the app holds no SwiftUI views at all.
-    private func showPanel(from button: NSStatusBarButton) {
+    private func showPanel(from button: NSStatusBarButton, settings: Bool = false) {
         monitor.setPanelOpen(true)
         let panel = PanelModel(monitor: monitor)
+        panel.showingSettings = settings
         let host = NSHostingController(rootView: PanelView().environment(panel))
         host.sizingOptions = [.preferredContentSize]
         let popover = NSPopover()
@@ -99,6 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "Open Activity Monitor", action: #selector(openActivityMonitor), keyEquivalent: "")
             .target = self
+        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Glance Bar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
@@ -107,6 +126,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     @objc private func openActivityMonitor() { Actions.openActivityMonitor() }
+
+    @objc private func openSettings() {
+        if let panel, popover?.isShown == true {
+            panel.showingSettings = true
+        } else if let button = statusItem.button {
+            showPanel(from: button, settings: true)
+        }
+    }
+}
+
+/// A System Settings pane, by the identifier its settings extension registers.
+enum SettingsPane: String {
+    case about = "com.apple.SystemProfiler.AboutExtension"
+    case battery = "com.apple.Battery-Settings.extension"
+    case network = "com.apple.Network-Settings.extension"
+    case storage = "com.apple.settings.Storage"
+
+    var url: URL? { URL(string: "x-apple.systempreferences:\(rawValue)") }
 }
 
 enum Actions {
@@ -114,6 +151,16 @@ enum Actions {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.ActivityMonitor")
         else { return }
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+    }
+
+    /// A pane macOS no longer has leaves System Settings on its first page.
+    static func open(_ pane: SettingsPane) {
+        if let url = pane.url { NSWorkspace.shared.open(url) }
+    }
+
+    static func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }
 

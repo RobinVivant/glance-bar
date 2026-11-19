@@ -28,7 +28,7 @@ swift run GlanceBar --demo
 |---------|----------------|
 | `swift test` | The math behind each reading, formatting, thresholds, settings and the render model |
 | `swift run GlanceBar --demo` | The real menu bar item and panel, on made-up readings |
-| `swift run GlanceBar --snapshot /tmp/glance-bar --demo` | The item, the panel and the settings in dark and light, as PNG files |
+| `swift run GlanceBar --snapshot /tmp/glance-bar --demo` | The item, the panel, the panel under the pointer and the settings in dark and light, as PNG files |
 | `scripts/package-release.sh` | The release build, the app bundle and the release zip |
 
 CI runs the tests, the release packaging and the demo snapshots on every pull request, and
@@ -47,7 +47,8 @@ attaches the snapshots to the run.
 ## Guidelines
 
 - **Test the logic.** A change to `GlanceCore` comes with a test. Views are checked with the demo
-  snapshots.
+  snapshots. What the pointer does lives in `PanelModel` (`hover` and `point(at:)`), so a snapshot
+  can show a hover state by setting it, as `SnapshotRunner` does for `panel-hover-*.png`.
 - **Measure what you add to the loop.** The app exists to cost little. For a change to sampling
   or drawing, compare the CPU time of the old and the new build over the same minute, with both
   running, and put the figures in the pull request:
