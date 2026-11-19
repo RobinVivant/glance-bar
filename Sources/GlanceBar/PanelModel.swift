@@ -33,6 +33,8 @@ final class PanelModel {
     var cpuHistory: [Float]
     var upHistory: [Float]
     var downHistory: [Float]
+    var cpuTimes: [Float]
+    var networkTimes: [Float]
     var settings: BarSettings
     /// A view that goes away under the pointer never reports that the pointer left it, so switching
     /// screens forgets what was under it.
@@ -56,6 +58,8 @@ final class PanelModel {
         cpuHistory = monitor.cpuHistory.values
         upHistory = monitor.upHistory.values
         downHistory = monitor.downHistory.values
+        cpuTimes = monitor.cpuTimes.values
+        networkTimes = monitor.networkTimes.values
         settings = monitor.settings
     }
 
@@ -65,6 +69,8 @@ final class PanelModel {
         cpuHistory = monitor.cpuHistory.values
         upHistory = monitor.upHistory.values
         downHistory = monitor.downHistory.values
+        cpuTimes = monitor.cpuTimes.values
+        networkTimes = monitor.networkTimes.values
         settings = monitor.settings
     }
 

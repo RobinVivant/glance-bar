@@ -54,6 +54,11 @@ final class Monitor {
     private(set) var cpuHistory = History(capacity: Monitor.historyLength)
     private(set) var upHistory = History(capacity: Monitor.historyLength)
     private(set) var downHistory = History(capacity: Monitor.historyLength)
+    /// When each reading of the CPU history and of the network histories was taken, in seconds
+    /// since launch. The panel tells from these how old the column under the pointer is. A `Float`
+    /// still tells whole seconds apart after three months without a restart.
+    private(set) var cpuTimes = History(capacity: Monitor.historyLength)
+    private(set) var networkTimes = History(capacity: Monitor.historyLength)
     private(set) var panelOpen = false
     var onChange: (() -> Void)?
 
@@ -86,6 +91,8 @@ final class Monitor {
             cpuHistory = DemoData.history(DemoData.cpuHistory)
             upHistory = DemoData.history(DemoData.upHistory)
             downHistory = DemoData.history(DemoData.downHistory)
+            cpuTimes = DemoData.history(DemoData.times)
+            networkTimes = cpuTimes
         }
     }
 
@@ -216,21 +223,25 @@ final class Monitor {
     /// taken in between would put a bar worth a few milliseconds in the history. A meter nobody
     /// looks at drops its baseline and its history, so it starts afresh when it comes back.
     private func sampleRates() {
+        let now = Float(ProcessInfo.processInfo.systemUptime - launched)
         if wants(.cpu) {
             if let load = cpu.sample() {
                 snapshot.cpu = load
                 cpuHistory.append(Float(load.total))
+                cpuTimes.append(now)
             }
         } else {
             cpu.reset()
             snapshot.cpu = nil
             cpuHistory.removeAll()
+            cpuTimes.removeAll()
         }
         if wants(.network) {
             if let rates = network.sample() {
                 snapshot.network = rates
                 upHistory.append(Float(rates.up))
                 downHistory.append(Float(rates.down))
+                networkTimes.append(now)
             } else if snapshot.network == nil {
                 // The first reading is only a baseline. Zero keeps the slot in the bar until the
                 // second one.
@@ -241,6 +252,7 @@ final class Monitor {
             snapshot.network = nil
             upHistory.removeAll()
             downHistory.removeAll()
+            networkTimes.removeAll()
         }
     }
 

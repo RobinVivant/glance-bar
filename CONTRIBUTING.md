@@ -30,9 +30,14 @@ swift run GlanceBar --demo
 | `swift run GlanceBar --demo` | The real menu bar item and panel, on made-up readings |
 | `swift run GlanceBar --snapshot /tmp/glance-bar --demo` | The item, the panel, the panel under the pointer and the settings in dark and light, as PNG files |
 | `scripts/package-release.sh` | The release build, the app bundle and the release zip |
+| `.github/scripts/check-settings-panes.sh` | That this Mac has every System Settings pane the panel opens |
 
-CI runs the tests, the release packaging and the demo snapshots on every pull request, and
-attaches the snapshots to the run.
+CI runs the tests, the pane check, the release packaging and the demo snapshots on every pull
+request, and attaches the snapshots to the run.
+
+GitHub sometimes never hands a macOS job to a runner and cancels it after 15 minutes in the
+queue. The "Retry dropped runs" workflow re-runs such a CI or Release run, up to its third
+attempt. A run that failed for any other reason stays failed.
 
 ## Where things live
 

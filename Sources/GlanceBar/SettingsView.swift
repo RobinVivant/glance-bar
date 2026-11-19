@@ -25,8 +25,9 @@ struct SettingsView: View {
             Card {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("Refresh every").sectionTitle()
-                    Picker("Refresh every", selection: Binding(get: { model.settings.interval },
-                                                               set: { value in model.update { $0.interval = value } })) {
+                    let interval = Binding(get: { model.settings.interval },
+                                           set: { value in model.update { $0.interval = value } })
+                    Picker("Refresh every", selection: interval) {
                         ForEach(BarSettings.intervals, id: \.self) { Text("\($0) s").tag($0) }
                     }
                     .pickerStyle(.segmented)

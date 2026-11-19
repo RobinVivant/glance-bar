@@ -211,9 +211,9 @@ scripts/build-app.sh                                  # the release app bundle i
 Without `--demo`, `--snapshot` renders the live readings of your Mac. The images in
 `docs/screenshots` come from `--snapshot docs/screenshots --demo`.
 
-CI builds, tests and renders the demo snapshots on every pull request. Pushing a tag such as
-`v1.0.0` that matches the version in `Resources/Info.plist` publishes `Glance Bar.app` as a
-zipped GitHub release.
+CI builds, tests and renders the demo snapshots on every pull request, and checks that macOS
+still has the System Settings panes the panel opens. Pushing a tag such as `v1.0.0` that matches
+the version in `Resources/Info.plist` publishes `Glance Bar.app` as a zipped GitHub release.
 
 ## Contributing
 

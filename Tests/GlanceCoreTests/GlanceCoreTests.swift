@@ -572,7 +572,8 @@ import Testing
     }
 
     @Test func healthFallsBackToTheRawCapacity() {
-        let raw: [String: Any] = ["CycleCount": 531, "BatteryData": ["DesignCapacity": 6075, "AppleRawMaxCapacity": 4915]]
+        let data = ["DesignCapacity": 6075, "AppleRawMaxCapacity": 4915]
+        let raw: [String: Any] = ["CycleCount": 531, "BatteryData": data]
         #expect(BatteryMath.health(from: raw) == BatteryHealth(cycles: 531, capacity: 81))
     }
 
@@ -643,9 +644,26 @@ import Testing
     }
 
     @Test func theNewestValueIsZeroSecondsOld() {
-        #expect(ChartProbe.age(index: 59, count: 60, interval: 2) == 0)
-        #expect(ChartProbe.age(index: 35, count: 60, interval: 2) == 48)
-        #expect(ChartProbe.age(index: 0, count: 60, interval: 5) == 295)
+        let times = (0..<60).map { Float($0) * 2 }
+        #expect(ChartProbe.age(index: 59, times: times) == 0)
+        #expect(ChartProbe.age(index: 35, times: times) == 48)
+        #expect(ChartProbe.age(index: 0, times: times) == 118)
+    }
+
+    @Test func anAgeFollowsTheTimesNotTheInterval() {
+        // Read every 5 s, then a 10 minute pause while the displays slept, then every 1 s.
+        let times: [Float] = [100, 105, 110, 710, 711, 712.4]
+        #expect(ChartProbe.age(index: 5, times: times) == 0)
+        #expect(ChartProbe.age(index: 4, times: times) == 1)
+        #expect(ChartProbe.age(index: 3, times: times) == 2)
+        #expect(ChartProbe.age(index: 2, times: times) == 602)
+        #expect(ChartProbe.age(index: 0, times: times) == 612)
+    }
+
+    @Test func aMissingReadingHasNoAge() {
+        #expect(ChartProbe.age(index: 0, times: []) == nil)
+        #expect(ChartProbe.age(index: 3, times: [1, 2, 3]) == nil)
+        #expect(ChartProbe.age(index: -1, times: [1, 2, 3]) == nil)
     }
 
     static let agoCases: [(Int, String)] = [(0, "now"), (-3, "now"), (48, "48 s ago"), (60, "1m 00s ago"),

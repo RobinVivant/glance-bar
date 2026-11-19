@@ -25,7 +25,7 @@ struct PanelView: View {
     private var header: some View {
         HStack(spacing: 10) {
             if model.showingSettings {
-                title("Settings", "Glance Bar \(Self.version)")
+                title("Settings", Self.appName)
             } else {
                 Button {
                     Actions.open(.about)
@@ -64,8 +64,11 @@ struct PanelView: View {
         }
     }
 
-    static var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+    /// "Glance Bar 1.1.1". A build run outside an app bundle (`swift run`) has no version, so the
+    /// name stands alone, and a README screenshot never shows a stale one.
+    static var appName: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        return version.map { "Glance Bar \($0)" } ?? "Glance Bar"
     }
 
     private var subtitle: String {
@@ -154,8 +157,8 @@ struct PanelView: View {
                         Text("CPU").sectionTitle()
                         Spacer()
                         if let probed {
-                            readout("\(Format.percent(Double(model.cpuHistory[probed.index]))) · "
-                                + age(of: probed.index, in: model.cpuHistory.count))
+                            readout(Format.percent(Double(model.cpuHistory[probed.index]))
+                                + age(of: probed.index, in: model.cpuHistory, taken: model.cpuTimes))
                         } else if let core {
                             readout(Format.core(core, efficiency: model.machine.efficiencyCores, total: cores.count)
                                 + " · \(Format.percent(cores[core]))")
@@ -197,8 +200,11 @@ struct PanelView: View {
         }
     }
 
-    private func age(of index: Int, in count: Int) -> String {
-        Format.ago(ChartProbe.age(index: index, count: count, interval: model.settings.interval))
+    /// " · 48 s ago" for a value of a history, from the times its readings were taken. Empty if
+    /// the two ever disagree on how many readings there are.
+    private func age(of index: Int, in values: [Float], taken times: [Float]) -> String {
+        guard times.count == values.count, let age = ChartProbe.age(index: index, times: times) else { return "" }
+        return " · \(Format.ago(age))"
     }
 
     /// What is under the pointer, in place of a card's usual caption.
@@ -273,19 +279,20 @@ struct PanelView: View {
 
     private var networkCard: some View {
         // Upload and download are appended together, so one index serves both.
-        let count = min(model.downHistory.count, model.upHistory.count)
-        let probed = probedIndex(of: count) { if case .network(let slot) = $0 { slot } else { nil } }
+        let down = model.downHistory, up = model.upHistory
+        let probed = probedIndex(of: min(down.count, up.count)) {
+            if case .network(let slot) = $0 { slot } else { nil }
+        }
         return interactive(.network, opens: "Network settings", action: { Actions.open(.network) }) {
             Card(highlighted: model.hovered == .network) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Network").sectionTitle()
                         Spacer()
-                        if let probed {
-                            let down = model.downHistory[model.downHistory.count - count + probed.index]
-                            let up = model.upHistory[model.upHistory.count - count + probed.index]
-                            readout("↓ \(Format.rate(Double(down)))  ↑ \(Format.rate(Double(up))) · "
-                                + age(of: probed.index, in: count))
+                        if let probed, down.count == up.count {
+                            readout("↓ \(Format.rate(Double(down[probed.index])))  "
+                                + "↑ \(Format.rate(Double(up[probed.index])))"
+                                + age(of: probed.index, in: down, taken: model.networkTimes))
                         } else if let interface = model.detail.interface, let address = model.detail.address {
                             addressButton(interface, address)
                         }
@@ -296,7 +303,7 @@ struct PanelView: View {
                             rate("arrow.up", model.snapshot.network?.up, Palette.upload)
                         }
                         .frame(width: 92, alignment: .leading)
-                        NetworkChart(down: model.downHistory, up: model.upHistory, slots: Monitor.historyLength,
+                        NetworkChart(down: down, up: up, slots: Monitor.historyLength,
                                      highlight: probed?.slot) { slot in
                             probe(slot.map(Probe.network)) { if case .network = $0 { true } else { false } }
                         }
