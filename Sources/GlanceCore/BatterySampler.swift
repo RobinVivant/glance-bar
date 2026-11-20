@@ -28,9 +28,10 @@ public enum BatteryMath {
     public static func health(from properties: [String: Any]) -> BatteryHealth? {
         guard let cycles = (properties["CycleCount"] as? NSNumber)?.intValue else { return nil }
         let data = properties["BatteryData"] as? [String: Any] ?? [:]
-        func capacity(_ key: String) -> Double? {
-            ((properties[key] ?? data[key]) as? NSNumber).flatMap { $0.doubleValue > 0 ? $0.doubleValue : nil }
+        func positive(_ value: Any?) -> Double? {
+            (value as? NSNumber).flatMap { $0.doubleValue > 0 ? $0.doubleValue : nil }
         }
+        func capacity(_ key: String) -> Double? { positive(properties[key]) ?? positive(data[key]) }
         // The nominal capacity is the one behind Maximum Capacity in System Settings. The raw
         // one moves with every charge and reads a few points lower.
         guard let design = capacity("DesignCapacity"),

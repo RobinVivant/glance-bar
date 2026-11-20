@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import SystemConfiguration
 
 /// Bytes an interface has carried since boot.
 public struct InterfaceCounters: Equatable, Sendable {
@@ -29,10 +30,24 @@ public enum NetworkMath {
         return NetworkRates(up: up / elapsed, down: down / elapsed)
     }
 
-    /// Physical interfaces only: Wi-Fi, Ethernet and tethering are all `en*`.
-    /// A VPN's `utun` traffic already crosses one of them, and counting it
-    /// again would double the figure.
-    public static func counts(interface name: String) -> Bool { name.hasPrefix("en") }
+    /// Physical interfaces only: Wi-Fi, Ethernet and tethering are all `en<digits>`.
+    /// A VPN's `utun` traffic or pseudo-interfaces like `enc0` already cross one of them.
+    public static func counts(interface name: String) -> Bool {
+        name.hasPrefix("en") && name.count > 2 && name.dropFirst(2).allSatisfy { $0.isASCII && $0.isNumber }
+    }
+
+    /// Picks the primary physical interface's address: prefers macOS's routed `preferred`
+    /// interface when it is among the non-link-local physical candidates (ignoring VPN `utun*`),
+    /// otherwise the first non-link-local interface, falling back to link-local (`169.254.*`)
+    /// only if nothing else exists.
+    public static func selectPrimary(candidates: [(interface: String, address: String)],
+                                     preferred: String?) -> (interface: String, address: String)? {
+        let routable = candidates.filter { !$0.address.hasPrefix("169.254.") }
+        if let preferred, let match = routable.first(where: { $0.interface == preferred }) {
+            return match
+        }
+        return routable.first ?? candidates.first
+    }
 }
 
 /// Reads the interface byte counters with one `sysctl` into a buffer the
@@ -112,16 +127,22 @@ public final class NetworkSampler {
     private func counts(_ index: UInt16) -> Bool {
         if let known = counted[index] { return known }
         var name = [CChar](repeating: 0, count: Int(IF_NAMESIZE))
-        let result = if_indextoname(UInt32(index), &name) != nil && NetworkMath.counts(interface: String(cString: name))
+        let interfaceName = if_indextoname(UInt32(index), &name) != nil
+            ? String(decoding: name.prefix { $0 != 0 }.map(UInt8.init(bitPattern:)), as: UTF8.self) : ""
+        let result = !interfaceName.isEmpty && NetworkMath.counts(interface: interfaceName)
         counted[index] = result
         return result
     }
 
-    /// The first physical interface that is up with an IPv4 address, such as ("en0", "192.168.1.20").
+    /// The primary physical interface that is up with an IPv4 address, such as ("en0", "192.168.1.20").
     public static func primaryAddress() -> (interface: String, address: String)? {
+        let preferred = (SCDynamicStoreCreate(nil, "GlanceBar" as CFString, nil, nil)
+            .flatMap { SCDynamicStoreCopyValue($0, "State:/Network/Global/IPv4" as CFString) }
+            as? [String: Any])?["PrimaryInterface"] as? String
         var list: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&list) == 0, let first = list else { return nil }
         defer { freeifaddrs(list) }
+        var candidates: [(interface: String, address: String)] = []
         for entry in sequence(first: first, next: { $0.pointee.ifa_next }) {
             let flags = Int32(entry.pointee.ifa_flags)
             guard flags & IFF_UP != 0, flags & IFF_RUNNING != 0, flags & IFF_LOOPBACK == 0,
@@ -131,8 +152,9 @@ public final class NetworkSampler {
             var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             guard getnameinfo(address, socklen_t(address.pointee.sa_len), &host, socklen_t(host.count), nil, 0,
                               NI_NUMERICHOST) == 0 else { continue }
-            return (name, String(cString: host))
+            let ip = String(decoding: host.prefix { $0 != 0 }.map(UInt8.init(bitPattern:)), as: UTF8.self)
+            candidates.append((name, ip))
         }
-        return nil
+        return NetworkMath.selectPrimary(candidates: candidates, preferred: preferred)
     }
 }

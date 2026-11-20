@@ -12,5 +12,5 @@ let package = Package(
         .executableTarget(name: "GlanceBar", dependencies: ["GlanceCore"]),
         .testTarget(name: "GlanceCoreTests", dependencies: ["GlanceCore"]),
     ],
-    swiftLanguageModes: [.v5]
+    swiftLanguageModes: [.v6]
 )

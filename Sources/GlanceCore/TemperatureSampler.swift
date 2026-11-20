@@ -58,6 +58,9 @@ public enum TemperatureMath {
 }
 
 public final class TemperatureSampler {
+    static let batteryKeys = ["TB0T", "TB1T", "TB2T"]
+    static let storageKeys = ["TH0x", "TH0a", "TH0b", "TH0A", "TH0B"]
+
     private let smc: SMC?
     private var cpuKeys: [SMC.Key] = []
     private var gpuKeys: [SMC.Key] = []
@@ -70,7 +73,7 @@ public final class TemperatureSampler {
         guard sysctlbyname("machdep.cpu.brand_string", nil, &size, nil, 0) == 0, size > 0 else { return "" }
         var buffer = [CChar](repeating: 0, count: size)
         guard sysctlbyname("machdep.cpu.brand_string", &buffer, &size, nil, 0) == 0 else { return "" }
-        return String(cString: buffer)
+        return String(decoding: buffer.prefix { $0 != 0 }.map(UInt8.init(bitPattern:)), as: UTF8.self)
     }
 
     public init(chip: String = TemperatureSampler.chipName) {
@@ -79,8 +82,8 @@ public final class TemperatureSampler {
         let keys = SensorKeys.forChip(chip)
         cpuKeys = keys.cpu.compactMap(smc.floatKey)
         gpuKeys = keys.gpu.compactMap(smc.floatKey)
-        batteryKey = smc.floatKey("TB0T")
-        storageKey = smc.floatKey("TH0x")
+        batteryKey = Self.batteryKeys.lazy.compactMap(smc.floatKey).first
+        storageKey = Self.storageKeys.lazy.compactMap(smc.floatKey).first
         scratch.reserveCapacity(max(cpuKeys.count, gpuKeys.count))
     }
 

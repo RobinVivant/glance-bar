@@ -18,18 +18,19 @@ public enum ChartProbe {
     /// Whole seconds between the reading at `index` and the newest one, from the times the
     /// readings were taken, oldest first. A changed refresh interval or a pause while the displays
     /// slept shows up as it happened. Nil when there is no reading at `index`.
-    public static func age(index: Int, times: [Float]) -> Int? {
+    public static func age(index: Int, times: [Double]) -> Int? {
         guard times.indices.contains(index), let newest = times.last else { return nil }
         return max(0, Int((newest - times[index]).rounded()))
     }
 }
 
 extension Format {
-    /// "now", "48 s ago", "1m 36s ago".
+    /// "now", "48s ago", "1m 36s ago", "3h 09m ago", "3d 9h ago".
     public static func ago(_ seconds: Int) -> String {
         if seconds <= 0 { return "now" }
-        if seconds < 60 { return "\(seconds) s ago" }
-        return String(format: "%dm %02ds ago", seconds / 60, seconds % 60)
+        if seconds < 60 { return "\(seconds)s ago" }
+        if seconds < 3600 { return String(format: "%dm %02ds ago", seconds / 60, seconds % 60) }
+        return "\(duration(TimeInterval(seconds))) ago"
     }
 
     /// "Core 3 · performance". Efficiency cores come first in the kernel's numbering; a Mac with

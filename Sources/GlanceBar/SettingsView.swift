@@ -5,7 +5,8 @@ import SwiftUI
 /// they refresh.
 struct SettingsView: View {
     @Environment(PanelModel.self) private var model
-    @State private var openAtLogin = LoginItem.isEnabled
+    @State private var openAtLogin = false
+    @State private var requiresApproval = false
     @State private var loginError: String?
 
     var body: some View {
@@ -38,18 +39,23 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Open at login").font(.system(size: 12))
+                            .foregroundStyle(model.monitor.demo ? .secondary : .primary)
                         Spacer()
                         Toggle("Open at login", isOn: Binding(get: { openAtLogin }, set: { value in
                             guard !model.monitor.demo else { return }
                             loginError = LoginItem.set(value)
                             openAtLogin = LoginItem.isEnabled
+                            requiresApproval = LoginItem.requiresApproval
                         }))
                         .toggleStyle(.switch)
                         .controlSize(.mini)
                         .labelsHidden()
+                        .disabled(model.monitor.demo)
+                        .help(model.monitor.demo ? "Disabled in demo mode" : "Start Glance Bar when you log in")
                     }
-                    if let loginError {
-                        Text(loginError).font(.system(size: 10)).foregroundStyle(Palette.amber)
+                    if let message = loginError ?? (requiresApproval && !model.monitor.demo
+                        ? "Allow Glance Bar in System Settings > General > Login Items." : nil) {
+                        Text(message).font(.system(size: 10)).foregroundStyle(Palette.amber)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -68,36 +74,53 @@ struct SettingsView: View {
             }
             .buttonStyle(ActionButtonStyle())
         }
+        .onAppear {
+            guard !model.monitor.demo else { return }
+            openAtLogin = LoginItem.isEnabled
+            requiresApproval = LoginItem.requiresApproval
+        }
     }
 
     private func row(_ meter: Meter) -> some View {
         let order = model.settings.order
+        let unavailable = meter == .battery && model.snapshot.battery == nil
+        let upDisabled = order.first == meter
+        let downDisabled = order.last == meter
         return HStack(spacing: 6) {
             Text(meter.title).font(.system(size: 12))
-                .foregroundStyle(model.settings.isVisible(meter) ? .primary : .secondary)
+                .foregroundStyle(!unavailable && model.settings.isVisible(meter) ? .primary : .secondary)
+            if unavailable {
+                Text("No battery").font(.system(size: 10)).foregroundStyle(.tertiary)
+            }
             Spacer()
             Button {
                 model.update { $0.move(meter, by: -1) }
             } label: {
                 Image(systemName: "chevron.up")
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
-            .disabled(order.first == meter)
+            .hoverBackdrop(outset: 0, corner: 5, enabled: !upDisabled)
+            .disabled(upDisabled)
             .help("Move left in the menu bar")
             Button {
                 model.update { $0.move(meter, by: 1) }
             } label: {
                 Image(systemName: "chevron.down")
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
-            .disabled(order.last == meter)
+            .hoverBackdrop(outset: 0, corner: 5, enabled: !downDisabled)
+            .disabled(downDisabled)
             .help("Move right in the menu bar")
             Toggle(meter.title, isOn: Binding(get: { model.settings.isVisible(meter) },
                                               set: { value in model.update { $0.setVisible(meter, value) } }))
                 .toggleStyle(.switch)
                 .controlSize(.mini)
                 .labelsHidden()
+                .disabled(unavailable)
                 .padding(.leading, 4)
         }
         .buttonStyle(.borderless)
-        .hoverBackdrop(outset: 3, corner: 6)
     }
 }

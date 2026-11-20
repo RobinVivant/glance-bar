@@ -122,6 +122,14 @@ public enum Levels {
         celsius >= 100 ? .critical : celsius >= 90 ? .high : .normal
     }
 
+    public static func storageTemperature(_ celsius: Double) -> Level {
+        celsius >= 75 ? .critical : celsius >= 65 ? .high : .normal
+    }
+
+    public static func batteryTemperature(_ celsius: Double) -> Level {
+        celsius >= 45 ? .critical : celsius >= 40 ? .high : .normal
+    }
+
     public static func disk(_ usedFraction: Double) -> Level {
         usedFraction >= 0.95 ? .critical : usedFraction >= 0.9 ? .high : .normal
     }

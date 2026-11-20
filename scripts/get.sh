@@ -20,12 +20,14 @@ fail() {
 # The whole script runs from this function, so a download that stops halfway runs nothing.
 main() {
   [[ "$(uname -s)" == "Darwin" ]] || fail "this app runs on macOS only."
-  [[ "$(uname -m)" == "arm64" ]] || fail "the app runs on Apple silicon only."
+  [[ "$(uname -m)" == "arm64" || "$(sysctl -in sysctl.proc_translated 2>/dev/null)" == "1" ]] ||
+    fail "the app runs on Apple silicon only."
   local major
   major="$(sw_vers -productVersion | cut -d. -f1)"
   [[ "$major" -ge 15 ]] || fail "macOS 15 or later is required (this Mac runs $(sw_vers -productVersion))."
 
   local version="${GLANCE_BAR_VERSION:-}"
+  version="${version#v}"
   if [[ -z "$version" ]]; then
     # The "latest" page redirects to the newest tag; this needs no API call and no rate limit.
     local latest
@@ -56,6 +58,10 @@ main() {
       sleep 1
     done
     pkill -x GlanceBar 2>/dev/null || true
+    for _ in 1 2 3 4 5; do
+      pgrep -xq GlanceBar || break
+      sleep 0.2
+    done
   fi
 
   mkdir -p "$dir"

@@ -15,7 +15,8 @@ func icon(_ px: Int) -> NSBitmapImageRep {
     let inset = s * 0.1
     let tile = NSRect(x: inset, y: inset, width: s - inset * 2, height: s - inset * 2)
     let shape = NSBezierPath(roundedRect: tile, xRadius: tile.width * 0.225, yRadius: tile.width * 0.225)
-    NSGradient(starting: NSColor(white: 0.2, alpha: 1), ending: NSColor(white: 0.07, alpha: 1))!.draw(in: shape, angle: -90)
+    NSGradient(starting: NSColor(white: 0.2, alpha: 1),
+               ending: NSColor(white: 0.07, alpha: 1))!.draw(in: shape, angle: -90)
     NSColor(white: 1, alpha: 0.08).setStroke()
     shape.lineWidth = s * 0.004
     shape.stroke()
@@ -47,6 +48,7 @@ let root = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathCompon
 let iconset = FileManager.default.temporaryDirectory.appendingPathComponent("AppIcon.iconset")
 try? FileManager.default.removeItem(at: iconset)
 try! FileManager.default.createDirectory(at: iconset, withIntermediateDirectories: true)
+defer { try? FileManager.default.removeItem(at: iconset) }
 for size in [16, 32, 128, 256, 512] {
     for scale in [1, 2] {
         let name = scale == 1 ? "icon_\(size)x\(size).png" : "icon_\(size)x\(size)@2x.png"
@@ -60,4 +62,8 @@ task.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
 task.arguments = ["-c", "icns", iconset.path, "-o", output.path]
 try! task.run()
 task.waitUntilExit()
-print(task.terminationStatus == 0 ? "Wrote \(output.path)" : "iconutil failed")
+if task.terminationStatus != 0 {
+    FileHandle.standardError.write(Data("iconutil failed\n".utf8))
+    exit(task.terminationStatus)
+}
+print("Wrote \(output.path)")

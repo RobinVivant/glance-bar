@@ -16,6 +16,7 @@ struct PanelView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
+            .clipped()
             footer
         }
         .frame(width: 360)
@@ -30,7 +31,7 @@ struct PanelView: View {
                 Button {
                     Actions.open(.about)
                 } label: {
-                    title(model.machine.chip, subtitle)
+                    title(model.machine.chip.isEmpty ? "This Mac" : model.machine.chip, subtitle)
                 }
                 .buttonStyle(.plain)
                 .hoverBackdrop(outset: 5, corner: 7)
@@ -38,14 +39,16 @@ struct PanelView: View {
                 .help("Open About in System Settings")
             }
             Spacer(minLength: 0)
-            Button {
-                Actions.openActivityMonitor()
-            } label: {
-                Image(systemName: "chart.bar.xaxis")
+            if !model.showingSettings {
+                Button {
+                    Actions.openActivityMonitor()
+                } label: {
+                    Image(systemName: "chart.bar.xaxis")
+                }
+                .buttonStyle(.borderless)
+                .hoverBackdrop()
+                .help("Open Activity Monitor")
             }
-            .buttonStyle(.borderless)
-            .hoverBackdrop()
-            .help("Open Activity Monitor")
             Button {
                 model.showingSettings.toggle()
             } label: {
@@ -130,10 +133,14 @@ struct PanelView: View {
         let hint = "Click to open \(destination)."
         return content()
             .contentShape(RoundedRectangle(cornerRadius: Surface.corner, style: .continuous))
+            .focusable()
+            .onKeyPress(.return) { action(); return .handled }
+            .onKeyPress(.space) { action(); return .handled }
             .onHover { model.hover(target, $0) }
             .onTapGesture(perform: action)
             .pointerStyle(.link)
             .help(help.map { "\($0) \(hint)" } ?? hint)
+            .accessibilityAddTraits(.isButton)
             .accessibilityAction(named: Text("Open \(destination)"), action)
             .animation(.easeOut(duration: 0.12), value: model.hovered == target)
     }
@@ -171,9 +178,9 @@ struct PanelView: View {
                         probe(slot.map(Probe.cpuHistory)) { if case .cpuHistory = $0 { true } else { false } }
                     }
                     .frame(height: 40)
-                    if !cores.isEmpty {
+                    if !cores.isEmpty || model.machine.cores > 0 {
                         CoreBars(cores: cores, efficiency: model.machine.efficiencyCores,
-                                 highlight: core) { index, inside in
+                                 placeholderCount: model.machine.cores, highlight: core) { index, inside in
                             model.point(at: .core(index), inside)
                         }
                     }
@@ -200,9 +207,9 @@ struct PanelView: View {
         }
     }
 
-    /// " · 48 s ago" for a value of a history, from the times its readings were taken. Empty if
+    /// " · 48s ago" for a value of a history, from the times its readings were taken. Empty if
     /// the two ever disagree on how many readings there are.
-    private func age(of index: Int, in values: [Float], taken times: [Float]) -> String {
+    private func age(of index: Int, in values: [Float], taken times: [Double]) -> String {
         guard times.count == values.count, let age = ChartProbe.age(index: index, times: times) else { return "" }
         return " · \(Format.ago(age))"
     }
@@ -245,11 +252,13 @@ struct PanelView: View {
                             .font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit()
                             .lineLimit(1).minimumScaleFactor(0.8)
                     } else {
+                        let cachedHelp = "Cached files are recently used data that macOS hands back to apps on "
+                            + "demand."
+                        let swapHelp = model.detail.swapUsed == nil ? "" : " Swap is memory moved to the startup disk."
                         Text("Cached files \(Format.memory(memory.cached))"
                             + (model.detail.swapUsed.map { " · swap \(Format.memory($0))" } ?? ""))
                             .font(.system(size: 10)).foregroundStyle(.tertiary).monospacedDigit()
-                            .help("Cached files are recently used data that macOS hands back to apps on demand. "
-                                + "Swap is memory moved to the startup disk.")
+                            .help(cachedHelp + swapHelp)
                     }
                 }
             }
@@ -283,7 +292,8 @@ struct PanelView: View {
         let probed = probedIndex(of: min(down.count, up.count)) {
             if case .network(let slot) = $0 { slot } else { nil }
         }
-        return interactive(.network, opens: "Network settings", action: { Actions.open(.network) }) {
+        return interactive(.network, opens: "Network settings", action: { Actions.open(.network) },
+                           help: "Download (above) and upload (below) each scale to their own peak.") {
             Card(highlighted: model.hovered == .network) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -362,7 +372,8 @@ struct PanelView: View {
                         Text(Format.percent(disk.usedFraction)).caption()
                     }
                     CapsuleBar(used: disk.usedFraction, color: Palette.level(level, normal: Palette.disk))
-                    Text("\(Format.storage(disk.free)) free of \(Format.storage(disk.total))").caption().lineLimit(1)
+                    Text("\(Format.storage(disk.free)) free of \(Format.storage(disk.total))").caption()
+                        .lineLimit(1).minimumScaleFactor(0.85)
                 }
                 .frame(maxHeight: .infinity, alignment: .top)
             }
@@ -382,7 +393,7 @@ struct PanelView: View {
                     CapsuleBar(used: Double(battery.percent) / 100, color: Palette.level(level, normal: Palette.ok))
                     Text(Format.batteryState(battery)).caption().lineLimit(1)
                     if let health = model.detail.batteryHealth {
-                        Self.batteryHealth(health).caption().lineLimit(1)
+                        Self.batteryHealth(health).caption().lineLimit(1).minimumScaleFactor(0.85)
                             .help("Health is what a full charge holds as a share of the design capacity, the "
                                 + "figure macOS calls Maximum Capacity. Below 80% the battery counts as worn.")
                     }
@@ -402,29 +413,32 @@ struct PanelView: View {
 
     private var temperatureCard: some View {
         let cpu = model.snapshot.temperature
-        let readings: [(String, Double?)] = [("CPU", cpu?.average), ("hottest core", cpu?.hottest),
-                                             ("GPU", model.detail.gpuTemperature),
-                                             ("SSD", model.detail.storageTemperature),
-                                             ("battery", model.detail.batteryTemperature)]
-        let shown = readings.filter { $0.1 != nil }
+        let readings: [(name: String, value: Double?, level: (Double) -> Level)] = [
+            ("CPU", cpu?.average, Levels.temperature),
+            ("hottest core", cpu?.hottest, Levels.temperature),
+            ("GPU", model.detail.gpuTemperature, Levels.temperature),
+            ("SSD", model.detail.storageTemperature, Levels.storageTemperature),
+            ("battery", model.detail.batteryTemperature, Levels.batteryTemperature),
+        ]
+        let shown = readings.filter { $0.value != nil }
         return Group {
             if !shown.isEmpty {
                 Card {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Temperatures").sectionTitle()
                         HStack(spacing: 0) {
-                            ForEach(shown, id: \.0) { name, value in
+                            ForEach(shown, id: \.name) { item in
+                                let value = item.value ?? 0
                                 VStack(spacing: 1) {
-                                    Text(Format.degrees(value ?? 0))
+                                    Text(Format.degrees(value))
                                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                                         .monospacedDigit()
-                                        .foregroundStyle(Palette.level(Levels.temperature(value ?? 0),
-                                                                       normal: .primary))
-                                    Text(name).font(.system(size: 9.5)).foregroundStyle(.secondary).lineLimit(1)
+                                        .foregroundStyle(Palette.level(item.level(value), normal: .primary))
+                                    Text(item.name).font(.system(size: 9.5)).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 .frame(maxWidth: .infinity)
-                                .hoverBackdrop(outset: 3, corner: 6)
-                                .help(Self.temperatureSources[name] ?? "")
+                                .contentShape(Rectangle())
+                                .help(Self.temperatureSources[item.name] ?? "")
                             }
                         }
                     }
@@ -433,31 +447,36 @@ struct PanelView: View {
         }
     }
 
-    /// Where each temperature comes from, by the name under its figure. Orange starts at 90°, red at 100°.
+    /// Where each temperature comes from, by the name under its figure.
     private static let temperatureSources = [
         "CPU": "Average of the CPU core sensors. Orange from 90°, red from 100°.",
-        "hottest core": "The warmest of the CPU core sensors.",
-        "GPU": "Average of the GPU sensors.",
-        "SSD": "The storage sensor.",
-        "battery": "The battery sensor.",
+        "hottest core": "The warmest of the CPU core sensors. Orange from 90°, red from 100°.",
+        "GPU": "Average of the GPU sensors. Orange from 90°, red from 100°.",
+        "SSD": "The storage sensor. Orange from 65°, red from 75°.",
+        "battery": "The battery sensor. Orange from 40°, red from 45°.",
     ]
 
     // MARK: Footer
 
     private var footer: some View {
         HStack(spacing: 6) {
-            Button {
-                model.showingSettings = true
-            } label: {
-                HStack(spacing: 6) {
-                    Circle().fill(Palette.ok).frame(width: 6, height: 6)
-                    Text(model.monitor.demo ? "Demo readings" : "Every \(model.settings.interval) s")
-                }
+            let status = HStack(spacing: 6) {
+                Circle().fill(Palette.ok).frame(width: 6, height: 6)
+                Text(model.monitor.demo ? "Demo readings" : "Every \(model.settings.interval) s")
             }
-            .buttonStyle(.plain)
-            .hoverBackdrop(outset: 4, corner: 5)
-            .pointerStyle(.link)
-            .help("Change the refresh interval in the settings")
+            if model.showingSettings {
+                status
+            } else {
+                Button {
+                    model.showingSettings = true
+                } label: {
+                    status
+                }
+                .buttonStyle(.plain)
+                .hoverBackdrop(outset: 4, corner: 5)
+                .pointerStyle(.link)
+                .help("Change the refresh interval in the settings")
+            }
             Spacer(minLength: 0)
             if let cpu = model.detail.appCPU, let memory = model.detail.appMemory {
                 Text("Glance Bar uses \(String(format: "%.1f", cpu * 100))% CPU · \(Format.memory(memory))")

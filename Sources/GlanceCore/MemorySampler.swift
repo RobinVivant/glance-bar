@@ -32,7 +32,7 @@ public final class MemorySampler {
 
     public init() {
         var size: vm_size_t = 0
-        pageSize = host_page_size(host, &size) == KERN_SUCCESS ? UInt64(size) : UInt64(vm_kernel_page_size)
+        pageSize = host_page_size(host, &size) == KERN_SUCCESS ? UInt64(size) : UInt64(getpagesize())
         var length = pressureMIB.count
         if sysctlnametomib("kern.memorystatus_vm_pressure_level", &pressureMIB, &length) == 0 {
             pressureMIBLength = length

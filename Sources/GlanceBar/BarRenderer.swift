@@ -17,7 +17,7 @@ enum BarRenderer {
     static let boxInset: CGFloat = 2.5
     static let graphWidth = boxInset * 2 + CGFloat(BarContent.graphBars) * barPitch - (barPitch - barWidth)
     static let gaugeWidth: CGFloat = 8
-    static let arrowWidth: CGFloat = 8
+    static let arrowWidth: CGFloat = 9.5
     /// One step of a graph or gauge, in points.
     static let step: CGFloat = 0.5
 
@@ -80,7 +80,9 @@ enum BarRenderer {
         let frame = ink.withAlphaComponent(0.5).cgColor
         let boxY = (((height - boxHeight) / 2) * 2).rounded() / 2
         guard !content.items.isEmpty else {
-            draw("–", .value, x: sidePadding, baseline: boxY + 3, color: frame, in: context)
+            let made = line("–", .value)
+            let baseline = (((height - fonts[.value]!.capHeight) / 2) * 2).rounded() / 2
+            draw(made.line, x: (24 - made.width) / 2, baseline: baseline, color: frame, in: context)
             return
         }
         var x = sidePadding
@@ -147,10 +149,21 @@ enum BarRenderer {
     }
 
     private static func strokeBox(_ rect: CGRect, color: CGColor, in context: CGContext) {
+        let scale = context.convertToDeviceSpace(CGSize(width: 1, height: 1)).width.magnitude
+        let stroked: CGRect
+        if scale > 0 {
+            let device = context.convertToDeviceSpace(rect).standardized
+            let minX = device.minX.rounded(), minY = device.minY.rounded()
+            let maxX = device.maxX.rounded(), maxY = device.maxY.rounded()
+            let snapped = CGRect(x: minX, y: minY, width: max(scale, maxX - minX),
+                                 height: max(scale, maxY - minY))
+            stroked = context.convertToUserSpace(snapped.insetBy(dx: scale / 2, dy: scale / 2))
+        } else {
+            stroked = rect.insetBy(dx: 0.5, dy: 0.5)
+        }
         context.setStrokeColor(color)
         context.setLineWidth(1)
-        context.addPath(CGPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 2.5, cornerHeight: 2.5,
-                               transform: nil))
+        context.addPath(CGPath(roundedRect: stroked, cornerWidth: 2.5, cornerHeight: 2.5, transform: nil))
         context.strokePath()
     }
 
