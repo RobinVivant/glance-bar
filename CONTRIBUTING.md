@@ -35,6 +35,11 @@ swift run GlanceBar --demo
 CI runs the tests, the pane check, the release packaging and the demo snapshots on every pull
 request, and attaches the snapshots to the run.
 
+Do not launch `build/Glance Bar.app` (even with `--snapshot`) on a Mac that already has Glance Bar
+installed: macOS silently repoints the "Open at login" entry (`SMAppService.mainApp`) to whichever
+copy of the bundle ran last. Use `swift run GlanceBar --demo` or `swift run GlanceBar --snapshot`
+instead, or run `scripts/install.sh` to replace the installed copy.
+
 GitHub sometimes never hands a macOS job to a runner and cancels it after 15 minutes in the
 queue. The "Retry dropped runs" workflow re-runs such a CI or Release run, up to its third
 attempt. A run that failed for any other reason stays failed.
@@ -96,8 +101,8 @@ By contributing, you agree that your contribution is licensed under the [MIT Lic
 
 ## Releases
 
-A maintainer publishes a release by setting `CFBundleShortVersionString` in `Resources/Info.plist`
-through a pull request, then pushing a tag of the same version from `main`:
+A maintainer publishes a release by bumping `CFBundleShortVersionString` and `CFBundleVersion` in
+`Resources/Info.plist` through a pull request, then pushing a tag of the same version from `main`:
 
 ```bash
 git tag v1.2.3 && git push origin v1.2.3

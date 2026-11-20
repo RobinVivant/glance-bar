@@ -134,12 +134,27 @@ import Testing
     }
 
     static let interfaceCases: [(String, Bool)] = [
-        ("en0", true), ("en12", true), ("utun3", false), ("lo0", false), ("bridge0", false), ("awdl0", false),
+        ("en0", true), ("en12", true), ("en", false), ("enc0", false), ("enfoo", false), ("utun3", false),
+        ("lo0", false), ("bridge0", false), ("awdl0", false),
     ]
 
     @Test(arguments: interfaceCases)
     func onlyPhysicalInterfacesCount(name: String, counted: Bool) {
         #expect(NetworkMath.counts(interface: name) == counted)
+    }
+
+    @Test func primaryAddressPrefersRoutedPhysicalInterfaceAndSkipsLinkLocal() throws {
+        let candidates = [("en0", "169.254.1.2"), ("en4", "10.0.0.5"), ("en5", "192.168.1.20")]
+        let chosen = try #require(NetworkMath.selectPrimary(candidates: candidates, preferred: "en5"))
+        #expect(chosen.interface == "en5" && chosen.address == "192.168.1.20")
+
+        let overVPN = try #require(NetworkMath.selectPrimary(candidates: candidates, preferred: "utun3"))
+        #expect(overVPN.interface == "en4" && overVPN.address == "10.0.0.5")
+
+        let linkLocalOnly = try #require(NetworkMath.selectPrimary(candidates: [("en0", "169.254.1.2")],
+                                                                   preferred: nil))
+        #expect(linkLocalOnly.interface == "en0" && linkLocalOnly.address == "169.254.1.2")
+        #expect(NetworkMath.selectPrimary(candidates: [], preferred: "en0") == nil)
     }
 }
 
@@ -218,6 +233,18 @@ import Testing
         #expect(Levels.temperature(100) == .critical)
     }
 
+    @Test func storageTemperatureTurnsAmberThenRed() {
+        #expect(Levels.storageTemperature(64.9) == .normal)
+        #expect(Levels.storageTemperature(65) == .high)
+        #expect(Levels.storageTemperature(75) == .critical)
+    }
+
+    @Test func batteryTemperatureTurnsAmberThenRed() {
+        #expect(Levels.batteryTemperature(39.9) == .normal)
+        #expect(Levels.batteryTemperature(40) == .high)
+        #expect(Levels.batteryTemperature(45) == .critical)
+    }
+
     @Test func diskTurnsAmberThenRed() {
         #expect(Levels.disk(0.89) == .normal)
         #expect(Levels.disk(0.9) == .high)
@@ -239,7 +266,7 @@ import Testing
 
 @Suite struct HistoryTests {
     @Test func keepsTheNewestValuesOldestFirst() {
-        var history = History(capacity: 3)
+        var history = History<Float>(capacity: 3)
         #expect(history.last == nil)
         #expect(history.values.isEmpty)
         for value in 1...5 { history.append(Float(value)) }
@@ -249,7 +276,7 @@ import Testing
     }
 
     @Test func suffixTakesTheNewestAndToleratesAnyCount() {
-        var history = History(capacity: 4)
+        var history = History<Float>(capacity: 4)
         for value in 1...6 { history.append(Float(value)) }
         #expect(history.suffix(2) == [5, 6])
         #expect(history.suffix(99) == [3, 4, 5, 6])
@@ -258,7 +285,7 @@ import Testing
     }
 
     @Test func aPartlyFilledHistoryReturnsWhatItHas() {
-        var history = History(capacity: 10)
+        var history = History<Float>(capacity: 10)
         history.append(7)
         history.append(8)
         #expect(history.suffix(5) == [7, 8])
@@ -266,7 +293,7 @@ import Testing
     }
 
     @Test func removingAllStartsOver() {
-        var history = History(capacity: 3)
+        var history = History<Float>(capacity: 3)
         for value in 1...5 { history.append(Float(value)) }
         history.removeAll()
         #expect(history.count == 0)
@@ -277,10 +304,18 @@ import Testing
     }
 
     @Test func aZeroCapacityStillHoldsOneValue() {
-        var history = History(capacity: 0)
+        var history = History<Float>(capacity: 0)
         history.append(1)
         history.append(2)
         #expect(history.values == [2])
+    }
+
+    @Test func keepsDoubleTimestampsWithoutFloatPrecisionLoss() {
+        var history = History<Double>(capacity: 2)
+        let base = 20_000_000.0
+        history.append(base)
+        history.append(base + 1)
+        #expect(ChartProbe.age(index: 0, times: history.values) == 1)
     }
 }
 
@@ -557,10 +592,12 @@ import Testing
     }
 
     /// The values this M1 Max reports on macOS 27, where System Information shows 83%.
-    private static let nested: [String: Any] = [
-        "CycleCount": 531,
-        "BatteryData": ["DesignCapacity": 6075, "NominalChargeCapacity": 5065, "AppleRawMaxCapacity": 4915],
-    ]
+    private static var nested: [String: Any] {
+        [
+            "CycleCount": 531,
+            "BatteryData": ["DesignCapacity": 6075, "NominalChargeCapacity": 5065, "AppleRawMaxCapacity": 4915],
+        ]
+    }
 
     @Test func healthIsTheNominalShareOfTheDesignCapacity() {
         #expect(BatteryMath.health(from: Self.nested) == BatteryHealth(cycles: 531, capacity: 83))
@@ -569,6 +606,16 @@ import Testing
     @Test func healthReadsCapacitiesFromTheEntryItselfOnOlderSystems() {
         let flat: [String: Any] = ["CycleCount": 12, "DesignCapacity": 6000, "NominalChargeCapacity": 5400]
         #expect(BatteryMath.health(from: flat) == BatteryHealth(cycles: 12, capacity: 90))
+    }
+
+    @Test func healthFallsBackToBatteryDataWhenTopLevelCapacityIsZero() {
+        let mixed: [String: Any] = [
+            "CycleCount": 120,
+            "DesignCapacity": 0,
+            "NominalChargeCapacity": 0,
+            "BatteryData": ["DesignCapacity": 6000, "NominalChargeCapacity": 5400],
+        ]
+        #expect(BatteryMath.health(from: mixed) == BatteryHealth(cycles: 120, capacity: 90))
     }
 
     @Test func healthFallsBackToTheRawCapacity() {
@@ -644,7 +691,7 @@ import Testing
     }
 
     @Test func theNewestValueIsZeroSecondsOld() {
-        let times = (0..<60).map { Float($0) * 2 }
+        let times = (0..<60).map { Double($0) * 2 }
         #expect(ChartProbe.age(index: 59, times: times) == 0)
         #expect(ChartProbe.age(index: 35, times: times) == 48)
         #expect(ChartProbe.age(index: 0, times: times) == 118)
@@ -652,7 +699,7 @@ import Testing
 
     @Test func anAgeFollowsTheTimesNotTheInterval() {
         // Read every 5 s, then a 10 minute pause while the displays slept, then every 1 s.
-        let times: [Float] = [100, 105, 110, 710, 711, 712.4]
+        let times: [Double] = [100, 105, 110, 710, 711, 712.4]
         #expect(ChartProbe.age(index: 5, times: times) == 0)
         #expect(ChartProbe.age(index: 4, times: times) == 1)
         #expect(ChartProbe.age(index: 3, times: times) == 2)
@@ -666,8 +713,10 @@ import Testing
         #expect(ChartProbe.age(index: -1, times: [1, 2, 3]) == nil)
     }
 
-    static let agoCases: [(Int, String)] = [(0, "now"), (-3, "now"), (48, "48 s ago"), (60, "1m 00s ago"),
-                                            (96, "1m 36s ago"), (295, "4m 55s ago")]
+    static let agoCases: [(Int, String)] = [
+        (0, "now"), (-3, "now"), (48, "48s ago"), (60, "1m 00s ago"), (96, "1m 36s ago"), (295, "4m 55s ago"),
+        (3600, "1h 00m ago"), (10_800, "3h 00m ago"), (90_000, "1d 1h ago"),
+    ]
 
     @Test(arguments: agoCases)
     func ages(seconds: Int, text: String) {

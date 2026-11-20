@@ -16,7 +16,7 @@ public enum BarItem: Equatable, Sendable {
 public struct BarContent: Equatable, Sendable {
     public static let steps = 22
     public static let graphBars = 12
-    public static let ratesTemplate = "999 KB/s"
+    public static let ratesTemplate = "999 MB/s"
 
     public var items: [BarItem]
 

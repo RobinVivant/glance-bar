@@ -33,8 +33,8 @@ final class PanelModel {
     var cpuHistory: [Float]
     var upHistory: [Float]
     var downHistory: [Float]
-    var cpuTimes: [Float]
-    var networkTimes: [Float]
+    var cpuTimes: [Double]
+    var networkTimes: [Double]
     var settings: BarSettings
     /// A view that goes away under the pointer never reports that the pointer left it, so switching
     /// screens forgets what was under it.

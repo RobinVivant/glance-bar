@@ -4,6 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/RobinVivant/glance-bar/actions/workflows/ci.yml"><img src="https://github.com/RobinVivant/glance-bar/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/RobinVivant/glance-bar/releases/latest"><img src="https://img.shields.io/github/v/release/RobinVivant/glance-bar" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/macOS-15%2B-black?logo=apple" alt="macOS 15 or later">
 </p>
@@ -12,13 +13,28 @@ Glance Bar is a macOS menu bar app that shows CPU, GPU, memory, disk, temperatur
 network activity in one compact item, with a detail panel behind a click.
 
 <p align="center">
-  <img src="docs/screenshots/menubar.png" width="514" alt="Menu bar item: CPU history graph, GPU, memory and disk gauges, 58 degrees, 84 percent battery, upload and download rates">
+  <img src="docs/screenshots/menubar.png" width="522" alt="Menu bar item: CPU history graph, GPU, memory and disk gauges, 58 degrees, 84 percent battery, upload and download rates">
 </p>
 
 <p align="center">
   <img src="docs/screenshots/panel-dark.png" width="38%" align="top" alt="Detail panel: CPU history and per-core bars, memory split, network chart, disk, battery and temperatures">
   <img src="docs/screenshots/settings-dark.png" width="38%" align="top" alt="Settings: a switch and order arrows per meter, refresh interval, Open at login">
 </p>
+
+<details>
+<summary>Light appearance</summary>
+
+<p align="center">
+  <img src="docs/screenshots/menubar-light.png" width="522" alt="Menu bar item in light appearance">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/panel-light.png" width="30%" align="top" alt="Detail panel in light appearance">
+  <img src="docs/screenshots/panel-hover-light.png" width="30%" align="top" alt="Detail panel under the pointer in light appearance">
+  <img src="docs/screenshots/settings-light.png" width="30%" align="top" alt="Settings in light appearance">
+</p>
+
+</details>
 
 The screenshots show the made-up readings of [demo mode](#try-it-without-installing).
 
@@ -33,7 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/RobinVivant/glance-bar/main/scripts
 The [script](scripts/get.sh) downloads the latest release, checks it against its SHA-256 file and
 its signature, copies `Glance Bar.app` to `~/Applications` and opens it. The item appears in the
 menu bar; click it for the panel. The first launch from an Applications folder turns on Open at
-Login. Run the same line again to update.
+login. Run the same line again to update.
 
 If the item does not show up, the menu bar is full: macOS puts new items behind the `«` chevron
 at the left end of the status area. Hold Command and drag the item to where you want it.
@@ -49,7 +65,7 @@ at the left end of the status area. Hold Command and drag the item to where you 
    the same:
 
     ```bash
-    xattr -dr com.apple.quarantine "/Applications/Glance Bar.app"
+    xattr -dr com.apple.quarantine "$HOME/Applications/Glance Bar.app"  # or /Applications/Glance Bar.app if moved there
     ```
 
 The install script does not hit this block: `curl` does not mark its downloads as coming from
@@ -99,7 +115,9 @@ swift run GlanceBar --demo
     | CPU and GPU load | 85% | 95% |
     | Memory | Kernel pressure level "warning" | Kernel pressure level "critical" |
     | Disk used | 90% | 95% |
-    | Temperature | 90° | 100° |
+    | CPU and GPU temperature | 90° | 100° |
+    | SSD temperature, in the panel | 65° | 75° |
+    | Battery temperature, in the panel | 40° | 45° |
     | Battery, on battery power only | 20% | 10% |
     | Battery health, in the panel | Below 80% | Never |
 
@@ -109,28 +127,36 @@ swift run GlanceBar --demo
   Battery health is what a full charge holds as a share of the design capacity, the figure macOS
   calls Maximum Capacity. The footer shows what Glance Bar itself uses.
 - **Pointing and clicking in the panel**: a part lights up under the pointer when a click does
-  something. A figure with more behind it explains itself in a tooltip.
+  something, and interactive tiles and cards can also be reached with Tab and Return or Space.
+  A figure with more behind it explains itself in a tooltip.
 
     | Part | Under the pointer | A click |
     |------|-------------------|---------|
     | CPU history and network chart | The reading of that column and how long ago it was taken | Opens Activity Monitor or Network settings, as the rest of the card does |
     | Core bars | The core's number, its kind and its load | Opens Activity Monitor |
     | Memory bar and its legend | What app, wired or compressed memory is, and its share of the total | Opens Activity Monitor |
+    | Memory pressure pill | What memory pressure and its color mean | Opens Activity Monitor |
+    | Memory cached and swap line | What cached files and swap mean | Opens Activity Monitor |
     | CPU, GPU and memory tiles | What the figures mean | Opens Activity Monitor |
+    | Network card | That download and upload scale to their own peaks | Opens Network settings |
     | Network address | | Copies the address |
+    | Network totals ("Since boot") | Which interfaces the totals cover | Opens Network settings |
     | Disk card | How free space is counted | Opens Storage settings |
     | Battery card | What health means | Opens Battery settings |
     | Temperatures | Which sensors a figure comes from | |
     | Chip name in the header | | Opens About in System Settings |
+    | Activity Monitor button in the header | | Opens Activity Monitor |
     | Refresh interval in the footer | | Opens the settings |
+    | App usage in the footer | What the CPU share and memory footprint mean | |
 
     <p align="center">
       <img src="docs/screenshots/panel-hover-dark.png" width="38%" alt="Detail panel with the pointer on a column of the CPU history: the card is lit, the column stands out and the caption reads 55 percent, 48 seconds ago">
     </p>
 
-- **Settings** (the gear in the panel): a switch and order arrows per meter, the refresh interval
-  (1, 2, 3 or 5 seconds, 2 by default), Open at Login, Activity Monitor and Quit.
-- **Right click**: Open Activity Monitor, Settings and Quit.
+- **Settings** (the gear in the panel, or `⌘,`): a switch and order arrows per meter, the refresh
+  interval (1, 2, 3 or 5 seconds, 2 by default), Open at login, Activity Monitor and Quit. Press
+  `⌘W` to close the panel and `⌘Q` to quit.
+- **Right click or Control-click**: Open Activity Monitor, Settings and Quit.
 
 ## What it costs
 
@@ -189,7 +215,7 @@ unknown chip the app tries every known key and keeps the ones the Mac has.
 Turn off Open at login in the settings, choose Quit, then:
 
 ```bash
-rm -rf "$HOME/Applications/Glance Bar.app"
+rm -rf "$HOME/Applications/Glance Bar.app"  # or /Applications/Glance Bar.app if moved there
 defaults delete local.glance-bar
 ```
 

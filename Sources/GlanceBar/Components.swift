@@ -1,27 +1,19 @@
 import GlanceCore
 import SwiftUI
 
-extension Color {
-    init(hex: String) {
-        let value = UInt64(hex.trimmingCharacters(in: CharacterSet(charactersIn: "# ")), radix: 16) ?? 0x8e8e93
-        self.init(.sRGB, red: Double((value >> 16) & 0xff) / 255, green: Double((value >> 8) & 0xff) / 255,
-                  blue: Double(value & 0xff) / 255)
-    }
-}
-
 enum Palette {
-    static let ok = Color(hex: "#30d158")
-    static let amber = Color(hex: "#ff9f0a")
-    static let red = Color(hex: "#ff453a")
+    static let ok = Color(nsColor: .systemGreen)
+    static let amber = Color(nsColor: .systemOrange)
+    static let red = Color(nsColor: .systemRed)
 
-    static let cpu = Color(hex: "#0a84ff")
-    static let gpu = Color(hex: "#bf5af2")
-    static let memory = Color(hex: "#30d1b2")
-    static let wired = Color(hex: "#0a84ff")
-    static let compressed = Color(hex: "#bf5af2")
-    static let disk = Color(hex: "#5e5ce6")
-    static let download = Color(hex: "#0a84ff")
-    static let upload = Color(hex: "#ff6482")
+    static let cpu = Color(nsColor: .systemBlue)
+    static let gpu = Color(nsColor: .systemPurple)
+    static let memory = Color(nsColor: .systemTeal)
+    static let wired = Color(nsColor: .systemBlue)
+    static let compressed = Color(nsColor: .systemPurple)
+    static let disk = Color(nsColor: .systemIndigo)
+    static let download = Color(nsColor: .systemBlue)
+    static let upload = Color(nsColor: .systemPink)
 
     /// A meter keeps its own color until its reading turns worrying.
     static func level(_ level: Level, normal: Color) -> Color {
@@ -91,24 +83,45 @@ struct CapsuleBar: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let visible = Array(parts.enumerated()).filter { $0.element.share > 0 }
+            let gap: CGFloat = visible.count > 1 ? 1 : 0
+            let widths = segmentWidths(for: visible.map(\.element.share), totalWidth: geometry.size.width, gap: gap)
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.primary.opacity(0.1))
-                HStack(spacing: parts.count > 1 ? 1 : 0) {
-                    ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
-                        if part.share > 0 {
-                            Rectangle().fill(part.color.gradient)
-                                .frame(width: max(2, geometry.size.width * min(1, part.share)))
-                                .opacity(highlight == nil || highlight == index ? 1 : Fade.others)
-                                // The bar is 6 points high: the pointer may be a little above or below.
-                                .contentShape(Rectangle().inset(by: -5))
-                                .onHover { onHover?(index, $0) }
+                HStack(spacing: gap) {
+                    ForEach(Array(zip(visible, widths)), id: \.0.offset) { item, width in
+                        Rectangle().fill(item.element.color.gradient)
+                            .frame(width: width)
+                            .opacity(highlight == nil || highlight == item.offset ? 1 : Fade.others)
+                    }
+                }
+            }
+            .clipShape(Capsule())
+            .overlay(alignment: .leading) {
+                if let onHover {
+                    // Extends 5 pt above and below the 6 pt track without overlapping adjacent segments.
+                    HStack(spacing: gap) {
+                        ForEach(Array(zip(visible, widths)), id: \.0.offset) { item, width in
+                            Color.clear
+                                .frame(width: width, height: 16)
+                                .contentShape(Rectangle())
+                                .onHover { onHover(item.offset, $0) }
                         }
                     }
                 }
-                .clipShape(Capsule())
             }
         }
         .frame(height: 6)
+    }
+
+    private func segmentWidths(for shares: [Double], totalWidth: CGFloat, gap: CGFloat) -> [CGFloat] {
+        guard !shares.isEmpty else { return [] }
+        let available = max(0, totalWidth - gap * CGFloat(shares.count - 1))
+        let raw = shares.map { max(2, available * CGFloat(min(1, $0))) }
+        let sum = raw.reduce(0, +)
+        guard sum > available, sum > 0 else { return raw }
+        let scale = available / sum
+        return raw.map { $0 * scale }
     }
 }
 
@@ -175,13 +188,14 @@ struct ActionButtonStyle: ButtonStyle {
 struct HoverBackdrop: ViewModifier {
     var outset: CGFloat
     var corner: CGFloat
+    var enabled = true
     @State private var hovering = false
 
     func body(content: Content) -> some View {
         content
             .background {
                 RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .fill(Color.primary.opacity(hovering ? 0.1 : 0))
+                    .fill(Color.primary.opacity(enabled && hovering ? 0.1 : 0))
                     .padding(-outset)
             }
             .onHover { hovering = $0 }
@@ -197,8 +211,8 @@ extension View {
         font(.system(size: 10.5)).foregroundStyle(.secondary).monospacedDigit()
     }
 
-    func hoverBackdrop(outset: CGFloat = 4, corner: CGFloat = 5) -> some View {
-        modifier(HoverBackdrop(outset: outset, corner: corner))
+    func hoverBackdrop(outset: CGFloat = 4, corner: CGFloat = 5, enabled: Bool = true) -> some View {
+        modifier(HoverBackdrop(outset: outset, corner: corner, enabled: enabled))
     }
 }
 
@@ -273,45 +287,50 @@ private extension View {
 struct CoreBars: View {
     var cores: [Double]
     var efficiency: Int
+    var placeholderCount = 0
     /// The core under the pointer: its track lights up and the other bars fade.
     var highlight: Int?
     /// Called with a core's index as the pointer enters and leaves its bar.
     var onHover: ((Int, Bool) -> Void)?
 
     var body: some View {
+        let count = cores.isEmpty ? placeholderCount : cores.count
         HStack(spacing: 3) {
-            if efficiency > 0, efficiency < cores.count {
-                group("E", cores.prefix(efficiency))
+            if efficiency > 0, efficiency < count {
+                group("E", 0..<efficiency)
                 Spacer().frame(width: 5)
-                group("P", cores.dropFirst(efficiency))
+                group("P", efficiency..<count)
             } else {
-                group(nil, cores[...])
+                group(nil, 0..<count)
             }
         }
         .frame(height: 22)
     }
 
     @ViewBuilder
-    private func group(_ name: String?, _ loads: ArraySlice<Double>) -> some View {
+    private func group(_ name: String?, _ range: Range<Int>) -> some View {
         if let name {
             Text(name).font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
         }
-        // A slice keeps the indices of the whole list, so `index` is the core's number.
-        ForEach(Array(loads.indices), id: \.self) { index in
-            let load = loads[index]
+        ForEach(range, id: \.self) { index in
+            let load = cores.indices.contains(index) ? cores[index] : nil
             GeometryReader { geometry in
                 ZStack(alignment: .bottom) {
                     RoundedRectangle(cornerRadius: 2.5, style: .continuous)
                         .fill(Color.primary.opacity(highlight == index ? 0.24 : 0.1))
-                    RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                        .fill(Palette.level(Levels.load(load), normal: Palette.cpu).gradient)
-                        .frame(height: max(2, geometry.size.height * min(1, load)))
-                        .opacity(highlight == nil || highlight == index ? 1 : Fade.others)
+                    if let load {
+                        RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                            .fill(Palette.level(Levels.load(load), normal: Palette.cpu).gradient)
+                            .frame(height: max(2, geometry.size.height * min(1, load)))
+                            .opacity(highlight == nil || highlight == index ? 1 : Fade.others)
+                    }
                 }
             }
             // Reaches halfway into the gap on each side, so moving along the row never falls between two bars.
             .contentShape(Rectangle().inset(by: -1.5))
-            .onHover { onHover?(index, $0) }
+            .onHover { inside in
+                if cores.indices.contains(index) { onHover?(index, inside) }
+            }
         }
     }
 }

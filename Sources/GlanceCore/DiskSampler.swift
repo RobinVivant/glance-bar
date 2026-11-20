@@ -8,7 +8,7 @@ public enum DiskSampler {
         let keys: Set<URLResourceKey> = [.volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey]
         if let values = try? URL(fileURLWithPath: path).resourceValues(forKeys: keys),
            let total = values.volumeTotalCapacity, total > 0,
-           let free = values.volumeAvailableCapacityForImportantUsage, free > 0 {
+           let free = values.volumeAvailableCapacityForImportantUsage, free >= 0 {
             return DiskReading(total: UInt64(total), free: UInt64(free))
         }
         var stats = statfs()

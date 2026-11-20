@@ -49,10 +49,10 @@ enum DemoData {
                                   burst: 3_800_000, last: 2_400_000)
 
     /// One reading every 2 seconds, the default refresh interval.
-    static let times = (0..<Monitor.historyLength).map { Float($0) * 2 }
+    static let times = (0..<Monitor.historyLength).map { Double($0) * 2 }
 
-    static func history(_ values: [Float]) -> History {
-        var history = History(capacity: Monitor.historyLength)
+    static func history<Element>(_ values: [Element]) -> History<Element> {
+        var history = History<Element>(capacity: Monitor.historyLength)
         values.forEach { history.append($0) }
         return history
     }

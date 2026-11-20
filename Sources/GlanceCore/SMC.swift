@@ -65,9 +65,11 @@ public final class SMC {
 
     private func call(key: UInt32, command: UInt8, dataSize: UInt32) -> Bool {
         SMCPacket.write(key: key, command: command, dataSize: dataSize, into: input)
+        output.initializeMemory(as: UInt8.self, repeating: 0, count: SMCPacket.size)
         var outputSize = SMCPacket.size
         return IOConnectCallStructMethod(connection, SMCPacket.selector, input, SMCPacket.size, output,
                                          &outputSize) == KERN_SUCCESS
+            && outputSize == SMCPacket.size
             && output.load(fromByteOffset: SMCPacket.resultOffset, as: UInt8.self) == 0
     }
 

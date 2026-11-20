@@ -17,6 +17,7 @@ if pgrep -xq GlanceBar; then
   osascript -e 'tell application id "local.glance-bar" to quit' >/dev/null 2>&1 || true
   for _ in 1 2 3 4 5; do pgrep -xq GlanceBar || break; sleep 1; done
   pkill -x GlanceBar 2>/dev/null || true
+  for _ in 1 2 3 4 5; do pgrep -xq GlanceBar || break; sleep 0.2; done
 fi
 rm -rf "$dest"
 cp -R "build/Glance Bar.app" "$dest"

@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSV
             NSApp.terminate(nil)  // one menu bar item is enough
             return
         }
+        installMainMenu()
         statusItem = NSStatusBar.system.statusItem(withLength: 24)
         // Demo mode leaves no trace: no login item and no remembered position.
         if !monitor.demo {
@@ -43,6 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSV
         monitor.onChange = { [weak self] in self?.update() }
         monitor.start()
         update()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        monitor.stop()
     }
 
     /// One pass per tick: the bar redraws only if its pixels would change, and the panel is fed
@@ -66,8 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSV
     private func coverWithToolTip(width: CGFloat) {
         guard let button = statusItem.button else { return }
         button.removeAllToolTips()
-        button.addToolTip(NSRect(x: 0, y: 0, width: width, height: NSStatusBar.system.thickness), owner: self,
-                          userData: nil)
+        let height = max(button.bounds.height, NSStatusBar.system.thickness, 44)
+        button.addToolTip(NSRect(x: 0, y: 0, width: width, height: height), owner: self, userData: nil)
     }
 
     func view(_ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint,
@@ -78,7 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSV
     }
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
-        if NSApp.currentEvent?.type == .rightMouseUp {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+            popover?.performClose(sender)
             showQuickMenu()
         } else if let popover, popover.isShown {
             popover.performClose(sender)
@@ -125,6 +132,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSV
         statusItem.menu = nil
     }
 
+    private func installMainMenu() {
+        let menu = NSMenu()
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Settings…", action: #selector(toggleSettings), keyEquivalent: ",").target = self
+        appMenu.addItem(withTitle: "Close", action: #selector(closePanel), keyEquivalent: "w").target = self
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit Glance Bar", action: #selector(NSApplication.terminate(_:)),
+                        keyEquivalent: "q")
+        appItem.submenu = appMenu
+        menu.addItem(appItem)
+        NSApp.mainMenu = menu
+    }
+
     @objc private func openActivityMonitor() { Actions.openActivityMonitor() }
 
     @objc private func openSettings() {
@@ -133,6 +154,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSV
         } else if let button = statusItem.button {
             showPanel(from: button, settings: true)
         }
+    }
+
+    @objc private func toggleSettings() {
+        if let panel, popover?.isShown == true {
+            panel.showingSettings.toggle()
+        } else if let button = statusItem.button {
+            showPanel(from: button, settings: true)
+        }
+    }
+
+    @objc private func closePanel() {
+        popover?.performClose(nil)
     }
 }
 
@@ -166,6 +199,7 @@ enum Actions {
 
 enum LoginItem {
     static var isEnabled: Bool { SMAppService.mainApp.status == .enabled }
+    static var requiresApproval: Bool { SMAppService.mainApp.status == .requiresApproval }
 
     /// Turns "Open at Login" on once, the first time an installed copy runs. The settings toggle
     /// can turn it off for good. A registration that fails is tried again at the next launch.

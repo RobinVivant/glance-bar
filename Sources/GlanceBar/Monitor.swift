@@ -51,14 +51,13 @@ final class Monitor {
     private(set) var settings: BarSettings
     private(set) var snapshot = Snapshot()
     private(set) var detail = Detail()
-    private(set) var cpuHistory = History(capacity: Monitor.historyLength)
-    private(set) var upHistory = History(capacity: Monitor.historyLength)
-    private(set) var downHistory = History(capacity: Monitor.historyLength)
+    private(set) var cpuHistory = History<Float>(capacity: Monitor.historyLength)
+    private(set) var upHistory = History<Float>(capacity: Monitor.historyLength)
+    private(set) var downHistory = History<Float>(capacity: Monitor.historyLength)
     /// When each reading of the CPU history and of the network histories was taken, in seconds
-    /// since launch. The panel tells from these how old the column under the pointer is. A `Float`
-    /// still tells whole seconds apart after three months without a restart.
-    private(set) var cpuTimes = History(capacity: Monitor.historyLength)
-    private(set) var networkTimes = History(capacity: Monitor.historyLength)
+    /// since launch. The panel tells from these how old the column under the pointer is.
+    private(set) var cpuTimes = History<Double>(capacity: Monitor.historyLength)
+    private(set) var networkTimes = History<Double>(capacity: Monitor.historyLength)
     private(set) var panelOpen = false
     var onChange: (() -> Void)?
 
@@ -71,6 +70,7 @@ final class Monitor {
     private lazy var temperature = TemperatureSampler()
     private var timer: DispatchSourceTimer?
     private var ticks = 0
+    private var panelGeneration = 0
     private var observers: [NSObjectProtocol] = []
     private var powerSource: CFRunLoopSource?
     private let launched = ProcessInfo.processInfo.systemUptime
@@ -101,20 +101,35 @@ final class Monitor {
     func start() {
         guard !demo else { return }
         sampleSlow()
+        sampleBattery()
         sampleRates()
         sampleLevels()
         schedule()
         let center = NSWorkspace.shared.notificationCenter
-        // Nobody reads a menu bar on a dark screen: stop the timer until the display is back.
-        observers.append(center.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil,
-                                            queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.pause() }
-        })
-        observers.append(center.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil,
-                                            queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.resume() }
-        })
+        // Nobody reads a menu bar on a dark screen or during sleep: stop the timer until wake.
+        for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.willSleepNotification] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.pause() }
+            })
+        }
+        for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.resume() }
+            })
+        }
         watchPowerSource()
+    }
+
+    func stop() {
+        timer?.cancel()
+        timer = nil
+        let center = NSWorkspace.shared.notificationCenter
+        observers.forEach(center.removeObserver)
+        observers.removeAll()
+        if let powerSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSource, .defaultMode)
+            self.powerSource = nil
+        }
     }
 
     private func schedule() {
@@ -141,6 +156,8 @@ final class Monitor {
 
     private func resume() {
         guard timer == nil, !demo else { return }
+        sampleSlow()
+        sampleBattery()
         tick()
         schedule()
     }
@@ -167,8 +184,9 @@ final class Monitor {
 
     // MARK: Settings and panel
 
-    /// Settings change only from the panel, and while it is open every meter is sampled, so a
-    /// meter that was just switched on already has its reading.
+    /// Settings change only from the panel, and while it is open every meter is sampled (with CPU
+    /// and network baselines seeded when the panel opens), so a meter that was just switched on
+    /// already has or promptly gets its reading.
     func update(_ change: (inout BarSettings) -> Void) {
         var next = settings
         change(&next)
@@ -188,21 +206,34 @@ final class Monitor {
     func setPanelOpen(_ open: Bool) {
         guard open != panelOpen else { return }
         panelOpen = open
+        panelGeneration += 1
         guard !demo else { return }
         if open {
-            // Fill in what hidden meters left out, take the per-core baseline now and a first
-            // per-core reading shortly after, so the panel does not wait a whole interval.
+            let generation = panelGeneration
+            // Seed baselines for hidden rate meters and take an initial reading shortly after so
+            // the panel does not stay blank for up to two full intervals.
+            if snapshot.cpu == nil { _ = cpu.sample() }
+            if network.totals == nil { _ = network.sample() }
             sampleSlow()
+            sampleBattery()
             sampleLevels()
             sampleDetail()
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) { [weak self] in
-                guard let self, self.panelOpen else { return }
+                guard let self, self.panelOpen, self.panelGeneration == generation else { return }
                 self.detail.cores = self.cpu.sampleCores() ?? self.detail.cores
+                if self.snapshot.cpu == nil, let load = self.cpu.sample() {
+                    self.snapshot.cpu = load
+                }
+                if self.snapshot.network == nil, let rates = self.network.sample() {
+                    self.snapshot.network = rates
+                    self.detail.networkTotals = self.network.totals
+                }
                 self.onChange?()
             }
         } else {
             cpu.forgetCores()
             detail = Detail()
+            if !settings.isVisible(.battery) { snapshot.battery = nil }
         }
     }
 
@@ -223,7 +254,7 @@ final class Monitor {
     /// taken in between would put a bar worth a few milliseconds in the history. A meter nobody
     /// looks at drops its baseline and its history, so it starts afresh when it comes back.
     private func sampleRates() {
-        let now = Float(ProcessInfo.processInfo.systemUptime - launched)
+        let now = ProcessInfo.processInfo.systemUptime - launched
         if wants(.cpu) {
             if let load = cpu.sample() {
                 snapshot.cpu = load
@@ -265,9 +296,12 @@ final class Monitor {
 
     private func sampleSlow() {
         snapshot.disk = wants(.disk) ? DiskSampler.read() : nil
-        snapshot.battery = wants(.battery) ? BatterySampler.read() : nil
         network.forgetInterfaces()
         if panelOpen { sampleOnOpen() }
+    }
+
+    private func sampleBattery() {
+        snapshot.battery = wants(.battery) ? BatterySampler.read() : nil
     }
 
     private func sampleDetail() {
