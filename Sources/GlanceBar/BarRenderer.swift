@@ -18,6 +18,8 @@ enum BarRenderer {
     static let graphWidth = boxInset * 2 + CGFloat(BarContent.graphBars) * barPitch - (barPitch - barWidth)
     static let gaugeWidth: CGFloat = 8
     static let arrowWidth: CGFloat = 9.5
+    static let glyphWidth: CGFloat = 6
+    static let glyphGap: CGFloat = 1.5
     /// One step of a graph or gauge, in points.
     static let step: CGFloat = 0.5
 
@@ -52,10 +54,12 @@ enum BarRenderer {
 
     private static func width(of item: BarItem) -> CGFloat {
         switch item {
-        case .graph: labelWidth + labelGap + graphWidth
-        case .gauge: labelWidth + labelGap + gaugeWidth
-        case .text(_, let template, _): line(template, .value).width.rounded(.up)
-        case .rates: arrowWidth + line(BarContent.ratesTemplate, .rate).width.rounded(.up)
+        case .graph: return labelWidth + labelGap + graphWidth
+        case .gauge: return labelWidth + labelGap + gaugeWidth
+        case .text(_, let template, _, let glyph):
+            let textWidth = line(template, .value).width.rounded(.up)
+            return glyph == .none ? textWidth : glyphWidth + glyphGap + textWidth
+        case .rates: return arrowWidth + line(BarContent.ratesTemplate, .rate).width.rounded(.up)
         }
     }
 
@@ -107,7 +111,11 @@ enum BarRenderer {
                     fill(CGRect(x: boxX + 2, y: boxY + 2, width: gaugeWidth - 4, height: CGFloat(steps) * step),
                          in: context)
                 }
-            case .text(let text, _, let level):
+            case .text(let text, _, let level, let glyph):
+                if glyph != .none {
+                    let glyphColor = ink.withAlphaComponent(glyph == .bolt ? 0.85 : 0.72).cgColor
+                    drawBatteryGlyph(glyph, x: x, height: height, color: glyphColor, in: context)
+                }
                 let made = line(text, .value)
                 let baseline = (((height - fonts[.value]!.capHeight) / 2) * 2).rounded() / 2
                 draw(made.line, x: x + itemWidth - made.width, baseline: baseline, color: color(level, ink: ink),
@@ -116,11 +124,12 @@ enum BarRenderer {
                 let capHeight = fonts[.rate]!.capHeight
                 let rows = [("↑", up, boxY + boxHeight - capHeight), ("↓", down, boxY)]
                 for (arrow, text, baseline) in rows {
-                    draw(arrow, .rate, x: x, baseline: baseline, color: ink.withAlphaComponent(0.6).cgColor,
-                         in: context)
+                    let idle = text == "0 KB/s"
+                    draw(arrow, .rate, x: x, baseline: baseline,
+                         color: ink.withAlphaComponent(idle ? 0.35 : 0.7).cgColor, in: context)
                     let made = line(text, .rate)
-                    draw(made.line, x: x + itemWidth - made.width, baseline: baseline, color: ink.cgColor,
-                         in: context)
+                    draw(made.line, x: x + itemWidth - made.width, baseline: baseline,
+                         color: ink.withAlphaComponent(idle ? 0.42 : 1).cgColor, in: context)
                 }
             }
             x += itemWidth + itemGap
@@ -146,6 +155,45 @@ enum BarRenderer {
         context.setFillColor(color)
         context.textPosition = CGPoint(x: x, y: baseline)
         CTLineDraw(line, context)
+    }
+
+    private static func drawBatteryGlyph(_ glyph: BatteryGlyph, x: CGFloat, height: CGFloat, color: CGColor,
+                                         in context: CGContext) {
+        context.setFillColor(color)
+        switch glyph {
+        case .none:
+            return
+        case .bolt:
+            let y = (height - 11) / 2
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: x + 3.6, y: y + 11))
+            path.addLine(to: CGPoint(x: x + 0.2, y: y + 4.8))
+            path.addLine(to: CGPoint(x: x + 2.8, y: y + 4.8))
+            path.addLine(to: CGPoint(x: x + 2.0, y: y))
+            path.addLine(to: CGPoint(x: x + 5.8, y: y + 6.2))
+            path.addLine(to: CGPoint(x: x + 3.2, y: y + 6.2))
+            path.closeSubpath()
+            context.addPath(path)
+            context.fillPath()
+        case .plug:
+            let y = (height - 10) / 2
+            // Two prongs on top, rounded body, short stem below.
+            context.fill(CGRect(x: x + 1.2, y: y + 6.5, width: 1.1, height: 3.5))
+            context.fill(CGRect(x: x + 3.7, y: y + 6.5, width: 1.1, height: 3.5))
+            let body = CGRect(x: x + 0.4, y: y + 2.5, width: 5.2, height: 4.5)
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: body.minX, y: body.maxY))
+            path.addLine(to: CGPoint(x: body.maxX, y: body.maxY))
+            path.addLine(to: CGPoint(x: body.maxX, y: body.minY + 2))
+            path.addQuadCurve(to: CGPoint(x: body.midX, y: body.minY),
+                              control: CGPoint(x: body.maxX, y: body.minY))
+            path.addQuadCurve(to: CGPoint(x: body.minX, y: body.minY + 2),
+                              control: CGPoint(x: body.minX, y: body.minY))
+            path.closeSubpath()
+            context.addPath(path)
+            context.fillPath()
+            context.fill(CGRect(x: x + 2.4, y: y, width: 1.2, height: 2.6))
+        }
     }
 
     private static func strokeBox(_ rect: CGRect, color: CGColor, in context: CGContext) {

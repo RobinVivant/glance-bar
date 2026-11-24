@@ -1,3 +1,8 @@
+/// Optional status glyph beside a menu bar text readout.
+public enum BatteryGlyph: Equatable, Sendable {
+    case none, bolt, plug
+}
+
 /// One element of the menu bar item, already reduced to what gets drawn.
 public enum BarItem: Equatable, Sendable {
     /// A history graph: bar heights in steps, oldest first, with a level per bar.
@@ -5,7 +10,7 @@ public enum BarItem: Equatable, Sendable {
     /// One level bar, its fill in steps.
     case gauge(label: String, fill: UInt8, level: Level)
     /// A value as text. `template` is the widest string of the same length, so the slot keeps its width.
-    case text(String, template: String, level: Level)
+    case text(String, template: String, level: Level, glyph: BatteryGlyph = .none)
     /// Upload over download.
     case rates(up: String, down: String)
 }
@@ -22,7 +27,8 @@ public struct BarContent: Equatable, Sendable {
 
     public init(items: [BarItem]) { self.items = items }
 
-    public static func make(snapshot: Snapshot, cpuHistory: [Float], visible: [Meter]) -> BarContent {
+    public static func make(snapshot: Snapshot, cpuHistory: [Float], visible: [Meter],
+                            temperatureUnit: TemperatureUnit = .celsius) -> BarContent {
         var items: [BarItem] = []
         for meter in visible {
             switch meter {
@@ -45,13 +51,15 @@ public struct BarContent: Equatable, Sendable {
                                     level: Levels.disk(disk.usedFraction)))
             case .temperature:
                 guard let temperature = snapshot.temperature else { continue }
-                let text = Format.degrees(temperature.average)
+                let text = Format.degrees(temperature.average, unit: temperatureUnit)
                 items.append(.text(text, template: text.count > 3 ? "888°" : "88°",
                                    level: Levels.temperature(temperature.average)))
             case .battery:
                 guard let battery = snapshot.battery else { continue }
                 let text = "\(battery.percent)%"
-                items.append(.text(text, template: text.count > 3 ? "100%" : "88%", level: Levels.battery(battery)))
+                let glyph: BatteryGlyph = battery.charging ? .bolt : (battery.onAC ? .plug : .none)
+                items.append(.text(text, template: text.count > 3 ? "100%" : "88%",
+                                   level: Levels.battery(battery), glyph: glyph))
             case .network:
                 guard let network = snapshot.network else { continue }
                 items.append(.rates(up: Format.rate(network.up), down: Format.rate(network.down)))

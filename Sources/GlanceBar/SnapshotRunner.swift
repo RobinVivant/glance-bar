@@ -14,7 +14,8 @@ enum SnapshotRunner {
 
         let content = BarContent.make(snapshot: monitor.snapshot,
                                       cpuHistory: monitor.cpuHistory.suffix(BarContent.graphBars),
-                                      visible: monitor.settings.visible)
+                                      visible: monitor.settings.visible,
+                                      temperatureUnit: monitor.settings.temperatureUnit)
         writeBar(content, dark: true, to: directory.appendingPathComponent("menubar.png"))
         writeBar(content, dark: false, to: directory.appendingPathComponent("menubar-light.png"))
 

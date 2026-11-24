@@ -19,6 +19,7 @@ enum Probe: Equatable {
     /// A column of the network chart, counted from the left.
     case network(slot: Int)
     case memory(MemoryPart)
+    case temperature(String)
 }
 
 /// What the panel shows. It exists only while the panel is open and is
@@ -31,6 +32,7 @@ final class PanelModel {
     var snapshot: Snapshot
     var detail: Detail
     var cpuHistory: [Float]
+    var cpuSystemHistory: [Float]
     var upHistory: [Float]
     var downHistory: [Float]
     var cpuTimes: [Double]
@@ -42,9 +44,11 @@ final class PanelModel {
         didSet {
             hovered = nil
             probe = nil
+            hoveringAddress = false
         }
     }
     private(set) var hovered: PanelTarget?
+    private(set) var hoveringAddress = false
     private(set) var probe: Probe?
     /// True for a moment after a click copied the network address.
     private(set) var addressCopied = false
@@ -56,6 +60,7 @@ final class PanelModel {
         snapshot = monitor.snapshot
         detail = monitor.detail
         cpuHistory = monitor.cpuHistory.values
+        cpuSystemHistory = monitor.cpuSystemHistory.values
         upHistory = monitor.upHistory.values
         downHistory = monitor.downHistory.values
         cpuTimes = monitor.cpuTimes.values
@@ -67,6 +72,7 @@ final class PanelModel {
         snapshot = monitor.snapshot
         detail = monitor.detail
         cpuHistory = monitor.cpuHistory.values
+        cpuSystemHistory = monitor.cpuSystemHistory.values
         upHistory = monitor.upHistory.values
         downHistory = monitor.downHistory.values
         cpuTimes = monitor.cpuTimes.values
@@ -89,6 +95,10 @@ final class PanelModel {
         } else if hovered == target {
             hovered = nil
         }
+    }
+
+    func hoverAddress(_ inside: Bool) {
+        hoveringAddress = inside
     }
 
     /// Same rule as `hover(_:_:)`, for the single reading under the pointer.

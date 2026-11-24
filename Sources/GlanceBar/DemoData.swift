@@ -15,7 +15,7 @@ enum DemoData {
         snapshot.temperature = CPUTemperature(average: 58, hottest: 67)
         snapshot.battery = BatteryReading(percent: 84, charging: false, onAC: false, minutesLeft: 312)
         snapshot.network = NetworkRates(up: 184_000, down: 2_400_000)
-        snapshot.disk = DiskReading(total: 994_000_000_000, free: 412_000_000_000)
+        snapshot.disk = DiskReading(total: 994_000_000_000, free: 412_000_000_000, purgeable: 17_300_000_000)
         return snapshot
     }
 
@@ -23,6 +23,7 @@ enum DemoData {
         Detail(cores: [0.62, 0.55, 0.48, 0.41, 0.36, 0.22, 0.31, 0.12, 0.09, 0.05], gpuTemperature: 52,
                batteryTemperature: 31, storageTemperature: 38, swapUsed: 1_300_000_000, loadAverage: 3.42,
                uptime: 3 * 86_400 + 9 * 3600, batteryHealth: BatteryHealth(cycles: 212, capacity: 91),
+               batteryPower: BatteryPower(watts: -14.2, adapterWatts: nil),
                interface: "en0", address: "192.168.1.20",
                networkTotals: InterfaceCounters(received: 48_200_000_000, sent: 6_100_000_000),
                appCPU: 0.011, appMemory: 31 << 20)
@@ -43,6 +44,14 @@ enum DemoData {
 
     static let cpuHistory = wave(count: Monitor.historyLength, base: 0.26, swing: 0.14, burstEvery: 17, burst: 0.45,
                                  last: 0.36)
+    static let cpuSystemHistory: [Float] = {
+        var values = cpuHistory.enumerated().map { index, total -> Float in
+            let share = 0.24 + 0.04 * sin(Double(index) * 0.6)
+            return min(total, Float(Double(total) * share))
+        }
+        values[values.count - 1] = 0.09
+        return values
+    }()
     static let upHistory = wave(count: Monitor.historyLength, base: 150_000, swing: 110_000, burstEvery: 23,
                                 burst: 500_000, last: 184_000)
     static let downHistory = wave(count: Monitor.historyLength, base: 1_500_000, swing: 1_100_000, burstEvery: 13,

@@ -41,8 +41,15 @@ public enum Format {
         "\(Int((min(1, max(0, fraction)) * 100).rounded()))%"
     }
 
-    public static func degrees(_ celsius: Double) -> String {
-        "\(Int(celsius.rounded()))°"
+    public static func degrees(_ celsius: Double, unit: TemperatureUnit = .celsius) -> String {
+        let value = unit == .fahrenheit ? celsius * 9 / 5 + 32 : celsius
+        return "\(Int(value.rounded()))°"
+    }
+
+    /// Power draw or charge rate: "8.4 W", "14.2 W", "105 W".
+    public static func watts(_ watts: Double) -> String {
+        let value = max(0, watts)
+        return value >= 99.95 ? "\(Int(value.rounded())) W" : "\(trimmed(value)) W"
     }
 
     /// "42m", "3h 09m", "3d 9h".

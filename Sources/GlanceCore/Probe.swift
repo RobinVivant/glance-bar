@@ -54,7 +54,8 @@ extension Format {
 /// The menu bar item's readings in words, one line per meter in the item's order. The gauges
 /// carry no figure in the menu bar: this is the text of the item's tooltip.
 public enum BarSummary {
-    public static func lines(snapshot: Snapshot, visible: [Meter]) -> [String] {
+    public static func lines(snapshot: Snapshot, visible: [Meter],
+                             temperatureUnit: TemperatureUnit = .celsius) -> [String] {
         visible.compactMap { meter in
             switch meter {
             case .cpu:
@@ -75,7 +76,8 @@ public enum BarSummary {
                 }
             case .temperature:
                 snapshot.temperature.map {
-                    "CPU \(Format.degrees($0.average)), hottest core \(Format.degrees($0.hottest))"
+                    "CPU \(Format.degrees($0.average, unit: temperatureUnit)), "
+                        + "hottest core \(Format.degrees($0.hottest, unit: temperatureUnit))"
                 }
             case .battery:
                 snapshot.battery.map { "Battery \($0.percent)%, \(Format.batteryState($0))" }

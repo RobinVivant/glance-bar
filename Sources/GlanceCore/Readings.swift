@@ -77,12 +77,15 @@ public struct BatteryReading: Equatable, Sendable {
 public struct DiskReading: Equatable, Sendable {
     public var total: UInt64
     public var free: UInt64
+    /// Space macOS can clear on demand, included in `free`.
+    public var purgeable: UInt64
 
     public var usedFraction: Double { total == 0 ? 0 : min(1, max(0, 1 - Double(free) / Double(total))) }
 
-    public init(total: UInt64, free: UInt64) {
+    public init(total: UInt64, free: UInt64, purgeable: UInt64 = 0) {
         self.total = total
         self.free = free
+        self.purgeable = purgeable
     }
 }
 

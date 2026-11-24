@@ -44,18 +44,26 @@ struct PanelView: View {
                     Actions.openActivityMonitor()
                 } label: {
                     Image(systemName: "chart.bar.xaxis")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
-                .hoverBackdrop()
+                .hoverBackdrop(outset: 0, corner: 6)
                 .help("Open Activity Monitor")
             }
             Button {
                 model.showingSettings.toggle()
             } label: {
                 Image(systemName: model.showingSettings ? "xmark" : "gearshape")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .hoverBackdrop()
+            .hoverBackdrop(outset: 0, corner: 6)
             .help(model.showingSettings ? "Back to the readings" : "Settings")
         }
     }
@@ -100,27 +108,35 @@ struct PanelView: View {
 
     private var tiles: some View {
         let snapshot = model.snapshot
+        let unit = model.settings.temperatureUnit
+        let cpuLevel = snapshot.cpu.map { Levels.load($0.total) } ?? .normal
+        let gpuLevel = snapshot.gpu.map(Levels.load) ?? .normal
+        let memoryLevel = snapshot.memory?.pressure ?? .normal
         return HStack(spacing: 8) {
             interactive(.cpuTile, opens: "Activity Monitor", action: Actions.openActivityMonitor,
                         help: "CPU load now. \"load\" is the load average of the last minute: how many "
                             + "processes ran or waited for a core.") {
                 StatTile(value: snapshot.cpu.map { Format.percent($0.total) } ?? "–", label: "CPU",
-                         color: Palette.level(snapshot.cpu.map { Levels.load($0.total) } ?? .normal, normal: .primary),
+                         color: Palette.level(cpuLevel, normal: .primary),
                          detail: model.detail.loadAverage.map { String(format: "load %.2f", $0) } ?? " ",
+                         fill: snapshot.cpu?.total, accent: Palette.level(cpuLevel, normal: Palette.cpu),
                          highlighted: model.hovered == .cpuTile)
             }
             interactive(.gpuTile, opens: "Activity Monitor", action: Actions.openActivityMonitor,
                         help: "Utilization of the busiest GPU, and the GPU temperature.") {
                 StatTile(value: snapshot.gpu.map(Format.percent) ?? "–", label: "GPU",
-                         color: Palette.level(snapshot.gpu.map(Levels.load) ?? .normal, normal: .primary),
-                         detail: model.detail.gpuTemperature.map { Format.degrees($0) } ?? " ",
+                         color: Palette.level(gpuLevel, normal: .primary),
+                         detail: model.detail.gpuTemperature.map { Format.degrees($0, unit: unit) } ?? " ",
+                         fill: snapshot.gpu, accent: Palette.level(gpuLevel, normal: Palette.gpu),
                          highlighted: model.hovered == .gpuTile)
             }
             interactive(.memoryTile, opens: "Activity Monitor", action: Actions.openActivityMonitor,
                         help: "Memory in use: app, wired and compressed memory as a share of the total.") {
-                StatTile(value: snapshot.memory.map { Format.percent($0.usedFraction) } ?? "–", label: "memory",
-                         color: Palette.level(snapshot.memory?.pressure ?? .normal, normal: .primary),
+                StatTile(value: snapshot.memory.map { Format.percent($0.usedFraction) } ?? "–", label: "Memory",
+                         color: Palette.level(memoryLevel, normal: .primary),
                          detail: snapshot.memory.map { "\(Format.memory($0.used)) used" } ?? " ",
+                         fill: snapshot.memory?.usedFraction,
+                         accent: Palette.level(memoryLevel, normal: Palette.memory),
                          highlighted: model.hovered == .memoryTile)
             }
         }
@@ -133,7 +149,7 @@ struct PanelView: View {
         let hint = "Click to open \(destination)."
         return content()
             .contentShape(RoundedRectangle(cornerRadius: Surface.corner, style: .continuous))
-            .focusable()
+            .focusable(interactions: .activate)
             .onKeyPress(.return) { action(); return .handled }
             .onKeyPress(.space) { action(); return .handled }
             .onHover { model.hover(target, $0) }
@@ -164,17 +180,29 @@ struct PanelView: View {
                         Text("CPU").sectionTitle()
                         Spacer()
                         if let probed {
-                            readout(Format.percent(Double(model.cpuHistory[probed.index]))
-                                + age(of: probed.index, in: model.cpuHistory, taken: model.cpuTimes))
+                            let total = Double(model.cpuHistory[probed.index])
+                            let ago = age(of: probed.index, in: model.cpuHistory, taken: model.cpuTimes)
+                            if model.cpuSystemHistory.count == model.cpuHistory.count {
+                                let system = min(total, Double(model.cpuSystemHistory[probed.index]))
+                                let user = max(0, total - system)
+                                readout("\(Format.percent(total)) · user \(Format.percent(user)) · "
+                                    + "sys \(Format.percent(system))\(ago)")
+                            } else {
+                                readout(Format.percent(total) + ago)
+                            }
                         } else if let core {
                             readout(Format.core(core, efficiency: model.machine.efficiencyCores, total: cores.count)
                                 + " · \(Format.percent(cores[core]))")
                         } else if let cpu = model.snapshot.cpu {
-                            Text("user \(Format.percent(cpu.user)) · system \(Format.percent(cpu.system))").caption()
+                            HStack(spacing: 8) {
+                                cpuLegendDot(Palette.cpu, "user \(Format.percent(cpu.user))")
+                                cpuLegendDot(Palette.cpuSystem, "system \(Format.percent(cpu.system))")
+                            }
                         }
                     }
-                    HistoryChart(values: model.cpuHistory, slots: Monitor.historyLength, color: Palette.cpu,
-                                 highlight: probed?.slot) { slot in
+                    HistoryChart(values: model.cpuHistory, secondary: model.cpuSystemHistory,
+                                 slots: Monitor.historyLength, color: Palette.cpu,
+                                 secondaryColor: Palette.cpuSystem, highlight: probed?.slot) { slot in
                         probe(slot.map(Probe.cpuHistory)) { if case .cpuHistory = $0 { true } else { false } }
                     }
                     .frame(height: 40)
@@ -186,6 +214,13 @@ struct PanelView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func cpuLegendDot(_ color: Color, _ label: String) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 5, height: 5)
+            Text(label).caption()
         }
     }
 
@@ -294,7 +329,7 @@ struct PanelView: View {
         }
         return interactive(.network, opens: "Network settings", action: { Actions.open(.network) },
                            help: "Download (above) and upload (below) each scale to their own peak.") {
-            Card(highlighted: model.hovered == .network) {
+            Card(highlighted: model.hovered == .network && !model.hoveringAddress) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Network").sectionTitle()
@@ -319,10 +354,27 @@ struct PanelView: View {
                         }
                         .frame(height: 36)
                     }
-                    if let totals = model.detail.networkTotals {
-                        Text("Since boot: \(Format.storage(totals.received)) down · \(Format.storage(totals.sent)) up")
-                            .font(.system(size: 10)).foregroundStyle(.tertiary).monospacedDigit()
-                            .help("Traffic over the en* interfaces since the Mac started.")
+                    let hasPeak = !down.isEmpty || !up.isEmpty
+                    if model.detail.networkTotals != nil || hasPeak {
+                        HStack(spacing: 8) {
+                            if let totals = model.detail.networkTotals {
+                                let downTotal = Format.storage(totals.received)
+                                let upTotal = Format.storage(totals.sent)
+                                Text("Boot \(downTotal) ↓ · \(upTotal) ↑")
+                                    .lineLimit(1).minimumScaleFactor(0.85)
+                                    .help("Traffic over the en* interfaces since the Mac started.")
+                            }
+                            Spacer(minLength: 0)
+                            if hasPeak {
+                                let downPeak = Format.rate(Double(down.max() ?? 0))
+                                let upPeak = Format.rate(Double(up.max() ?? 0))
+                                Text("Peak \(downPeak) ↓ · \(upPeak) ↑")
+                                    .lineLimit(1).minimumScaleFactor(0.85)
+                                    .help("Highest download and upload rates shown in the chart; "
+                                        + "each half scales to its own peak.")
+                            }
+                        }
+                        .font(.system(size: 10)).foregroundStyle(.tertiary).monospacedDigit()
                     }
                 }
             }
@@ -334,18 +386,24 @@ struct PanelView: View {
         Button {
             model.copyAddress()
         } label: {
-            if model.addressCopied {
+            ZStack(alignment: .trailing) {
                 HStack(spacing: 3) {
-                    Image(systemName: "checkmark").font(.system(size: 8, weight: .bold))
-                    Text("Copied").font(.system(size: 10.5, weight: .medium))
+                    Text("\(interface) · \(address)").caption()
+                    Image(systemName: "doc.on.doc").font(.system(size: 8.5)).foregroundStyle(.tertiary)
                 }
-                .foregroundStyle(Palette.ok)
-            } else {
-                Text("\(interface) · \(address)").caption()
+                .opacity(model.addressCopied ? 0 : 1)
+                if model.addressCopied {
+                    HStack(spacing: 3) {
+                        Image(systemName: "checkmark").font(.system(size: 8, weight: .bold))
+                        Text("Copied").font(.system(size: 10.5, weight: .medium))
+                    }
+                    .foregroundStyle(Palette.ok)
+                }
             }
         }
         .buttonStyle(.plain)
         .hoverBackdrop(outset: 3, corner: 4)
+        .onHover { model.hoverAddress($0) }
         .pointerStyle(.link)
         .help("Copy the address")
     }
@@ -362,6 +420,10 @@ struct PanelView: View {
 
     private func diskCard(_ disk: DiskReading) -> some View {
         let level = Levels.disk(disk.usedFraction)
+        let usedBytes = disk.total - min(disk.total, disk.free)
+        let detailText = disk.purgeable >= 1_000_000_000
+            ? "incl. \(Format.storage(disk.purgeable)) purgeable"
+            : "\(Format.storage(usedBytes)) used"
         return interactive(.disk, opens: "Storage settings", action: { Actions.open(.storage) },
                            help: "The startup volume. Free space counts what macOS can clear on demand.") {
             Card(highlighted: model.hovered == .disk) {
@@ -373,6 +435,8 @@ struct PanelView: View {
                     }
                     CapsuleBar(used: disk.usedFraction, color: Palette.level(level, normal: Palette.disk))
                     Text("\(Format.storage(disk.free)) free of \(Format.storage(disk.total))").caption()
+                        .lineLimit(1).minimumScaleFactor(0.85)
+                    Text(detailText).font(.system(size: 10)).foregroundStyle(.tertiary).monospacedDigit()
                         .lineLimit(1).minimumScaleFactor(0.85)
                 }
                 .frame(maxHeight: .infinity, alignment: .top)
@@ -388,10 +452,19 @@ struct PanelView: View {
                     HStack {
                         Text("Battery").sectionTitle()
                         Spacer()
-                        Text("\(battery.percent)%").caption()
+                        HStack(spacing: 4) {
+                            if battery.charging {
+                                Image(systemName: "bolt.fill").font(.system(size: 9)).foregroundStyle(Palette.ok)
+                            } else if battery.onAC {
+                                Image(systemName: "powerplug.fill").font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text("\(battery.percent)%").caption()
+                        }
                     }
                     CapsuleBar(used: Double(battery.percent) / 100, color: Palette.level(level, normal: Palette.ok))
-                    Text(Format.batteryState(battery)).caption().lineLimit(1)
+                    Text(Self.batteryStateText(battery, power: model.detail.batteryPower)).caption()
+                        .lineLimit(1).minimumScaleFactor(0.85)
                     if let health = model.detail.batteryHealth {
                         Self.batteryHealth(health).caption().lineLimit(1).minimumScaleFactor(0.85)
                             .help("Health is what a full charge holds as a share of the design capacity, the "
@@ -401,6 +474,21 @@ struct PanelView: View {
                 .frame(maxHeight: .infinity, alignment: .top)
             }
         }
+    }
+
+    private static func batteryStateText(_ battery: BatteryReading, power: BatteryPower?) -> String {
+        let base = Format.batteryState(battery)
+        guard let power else { return base }
+        if battery.charging, let watts = power.watts, watts > 0 {
+            return "\(base) · +\(Format.watts(watts))"
+        }
+        if !battery.onAC, let watts = power.watts, watts < 0 {
+            return "\(base) · \(Format.watts(-watts))"
+        }
+        if battery.onAC, !battery.charging, let adapter = power.adapterWatts {
+            return "\(base) · \(adapter)W"
+        }
+        return base
     }
 
     /// The capacity turns amber once the battery counts as worn.
@@ -413,6 +501,8 @@ struct PanelView: View {
 
     private var temperatureCard: some View {
         let cpu = model.snapshot.temperature
+        let unit = model.settings.temperatureUnit
+        let probedTemp: String? = if case .temperature(let name) = model.probe { name } else { nil }
         let readings: [(name: String, value: Double?, level: (Double) -> Level)] = [
             ("CPU", cpu?.average, Levels.temperature),
             ("hottest core", cpu?.hottest, Levels.temperature),
@@ -425,20 +515,31 @@ struct PanelView: View {
             if !shown.isEmpty {
                 Card {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Temperatures").sectionTitle()
+                        HStack {
+                            Text("Temperatures").sectionTitle()
+                            Spacer()
+                            if let probedTemp {
+                                readout(Self.temperatureSummary(for: probedTemp, unit: unit))
+                            }
+                        }
                         HStack(spacing: 0) {
-                            ForEach(shown, id: \.name) { item in
+                            ForEach(Array(shown.enumerated()), id: \.element.name) { index, item in
+                                if index > 0 {
+                                    Rectangle().fill(Color.primary.opacity(0.08)).frame(width: 0.5, height: 20)
+                                }
                                 let value = item.value ?? 0
                                 VStack(spacing: 1) {
-                                    Text(Format.degrees(value))
+                                    Text(Format.degrees(value, unit: unit))
                                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                                         .monospacedDigit()
                                         .foregroundStyle(Palette.level(item.level(value), normal: .primary))
                                     Text(item.name).font(.system(size: 9.5)).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 .frame(maxWidth: .infinity)
+                                .opacity(probedTemp == nil || probedTemp == item.name ? 1 : Fade.others)
                                 .contentShape(Rectangle())
-                                .help(Self.temperatureSources[item.name] ?? "")
+                                .onHover { model.point(at: .temperature(item.name), $0) }
+                                .help(Self.temperatureSummary(for: item.name, unit: unit))
                             }
                         }
                     }
@@ -447,14 +548,19 @@ struct PanelView: View {
         }
     }
 
-    /// Where each temperature comes from, by the name under its figure.
-    private static let temperatureSources = [
-        "CPU": "Average of the CPU core sensors. Orange from 90°, red from 100°.",
-        "hottest core": "The warmest of the CPU core sensors. Orange from 90°, red from 100°.",
-        "GPU": "Average of the GPU sensors. Orange from 90°, red from 100°.",
-        "SSD": "The storage sensor. Orange from 65°, red from 75°.",
-        "battery": "The battery sensor. Orange from 40°, red from 45°.",
-    ]
+    private static func temperatureSummary(for name: String, unit: TemperatureUnit) -> String {
+        func threshold(_ high: Double, _ critical: Double) -> String {
+            "orange \(Format.degrees(high, unit: unit)), red \(Format.degrees(critical, unit: unit))"
+        }
+        return switch name {
+        case "CPU": "Core average · \(threshold(90, 100))"
+        case "hottest core": "Warmest core · \(threshold(90, 100))"
+        case "GPU": "GPU sensors · \(threshold(90, 100))"
+        case "SSD": "Storage sensor · \(threshold(65, 75))"
+        case "battery": "Battery sensor · \(threshold(40, 45))"
+        default: ""
+        }
+    }
 
     // MARK: Footer
 
@@ -489,5 +595,6 @@ struct PanelView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(Color.primary.opacity(0.04))
+        .overlay(alignment: .top) { Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 0.5) }
     }
 }

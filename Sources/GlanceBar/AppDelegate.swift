@@ -55,7 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSV
     private func update() {
         let content = BarContent.make(snapshot: monitor.snapshot,
                                       cpuHistory: monitor.cpuHistory.suffix(BarContent.graphBars),
-                                      visible: monitor.settings.visible)
+                                      visible: monitor.settings.visible,
+                                      temperatureUnit: monitor.settings.temperatureUnit)
         let width = BarRenderer.width(of: content)
         if width != itemWidth {
             itemWidth = width
@@ -78,7 +79,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSV
     func view(_ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint,
               userData data: UnsafeMutableRawPointer?) -> String {
         // A meter shows in the item only when it has a reading, so the lines match what is drawn.
-        let lines = BarSummary.lines(snapshot: monitor.snapshot, visible: monitor.settings.visible)
+        let lines = BarSummary.lines(snapshot: monitor.snapshot, visible: monitor.settings.visible,
+                                     temperatureUnit: monitor.settings.temperatureUnit)
         return (lines + ["Click for details, right-click for the menu"]).joined(separator: "\n")
     }
 
