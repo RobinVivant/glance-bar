@@ -12,6 +12,7 @@ struct Detail: Equatable {
     var loadAverage: Double?
     var uptime: TimeInterval = 0
     var batteryHealth: BatteryHealth?
+    var batteryPower: BatteryPower?
     var interface: String?
     var address: String?
     var networkTotals: InterfaceCounters?
@@ -52,6 +53,7 @@ final class Monitor {
     private(set) var snapshot = Snapshot()
     private(set) var detail = Detail()
     private(set) var cpuHistory = History<Float>(capacity: Monitor.historyLength)
+    private(set) var cpuSystemHistory = History<Float>(capacity: Monitor.historyLength)
     private(set) var upHistory = History<Float>(capacity: Monitor.historyLength)
     private(set) var downHistory = History<Float>(capacity: Monitor.historyLength)
     /// When each reading of the CPU history and of the network histories was taken, in seconds
@@ -89,6 +91,7 @@ final class Monitor {
             snapshot = DemoData.snapshot
             detail = DemoData.detail
             cpuHistory = DemoData.history(DemoData.cpuHistory)
+            cpuSystemHistory = DemoData.history(DemoData.cpuSystemHistory)
             upHistory = DemoData.history(DemoData.upHistory)
             downHistory = DemoData.history(DemoData.downHistory)
             cpuTimes = DemoData.history(DemoData.times)
@@ -259,12 +262,14 @@ final class Monitor {
             if let load = cpu.sample() {
                 snapshot.cpu = load
                 cpuHistory.append(Float(load.total))
+                cpuSystemHistory.append(Float(load.system))
                 cpuTimes.append(now)
             }
         } else {
             cpu.reset()
             snapshot.cpu = nil
             cpuHistory.removeAll()
+            cpuSystemHistory.removeAll()
             cpuTimes.removeAll()
         }
         if wants(.network) {
@@ -314,6 +319,7 @@ final class Monitor {
         detail.loadAverage = getloadavg(&load, 1) == 1 ? load : nil
         detail.uptime = bootTime.map { Date().timeIntervalSince($0) } ?? ProcessInfo.processInfo.systemUptime
         detail.networkTotals = network.totals
+        detail.batteryPower = snapshot.battery == nil ? nil : BatterySampler.power()
         var usage = rusage()
         if getrusage(RUSAGE_SELF, &usage) == 0 {
             let seconds = Double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec)

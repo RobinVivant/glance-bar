@@ -16,7 +16,19 @@ struct SettingsView: View {
                     HStack {
                         Text("Menu bar").sectionTitle()
                         Spacer()
-                        Text("top of the list is leftmost").font(.system(size: 10)).foregroundStyle(.tertiary)
+                        if model.settings != BarSettings() {
+                            Button("Reset") {
+                                model.update { $0 = BarSettings() }
+                            }
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .buttonStyle(.plain)
+                            .hoverBackdrop(outset: 3, corner: 4)
+                            .pointerStyle(.link)
+                            .help("Restore default meters, order, interval and units")
+                        } else {
+                            Text("top of the list is leftmost").font(.system(size: 10)).foregroundStyle(.tertiary)
+                        }
                     }
                     ForEach(model.settings.order) { meter in
                         row(meter)
@@ -33,6 +45,20 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                }
+            }
+            Card {
+                HStack {
+                    Text("Temperature").sectionTitle()
+                    Spacer()
+                    let unit = Binding(get: { model.settings.temperatureUnit },
+                                       set: { value in model.update { $0.temperatureUnit = value } })
+                    Picker("Temperature unit", selection: unit) {
+                        ForEach(TemperatureUnit.allCases) { Text($0.symbol).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 96)
                 }
             }
             Card {
@@ -86,9 +112,14 @@ struct SettingsView: View {
         let unavailable = meter == .battery && model.snapshot.battery == nil
         let upDisabled = order.first == meter
         let downDisabled = order.last == meter
+        let active = !unavailable && model.settings.isVisible(meter)
         return HStack(spacing: 6) {
+            Image(systemName: Self.icon(for: meter))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(active ? Palette.meter(meter) : Color.secondary.opacity(0.5))
+                .frame(width: 14)
             Text(meter.title).font(.system(size: 12))
-                .foregroundStyle(!unavailable && model.settings.isVisible(meter) ? .primary : .secondary)
+                .foregroundStyle(active ? .primary : .secondary)
             if unavailable {
                 Text("No battery").font(.system(size: 10)).foregroundStyle(.tertiary)
             }
@@ -102,6 +133,7 @@ struct SettingsView: View {
             }
             .hoverBackdrop(outset: 0, corner: 5, enabled: !upDisabled)
             .disabled(upDisabled)
+            .accessibilityLabel("Move \(meter.title) left")
             .help("Move left in the menu bar")
             Button {
                 model.update { $0.move(meter, by: 1) }
@@ -112,6 +144,7 @@ struct SettingsView: View {
             }
             .hoverBackdrop(outset: 0, corner: 5, enabled: !downDisabled)
             .disabled(downDisabled)
+            .accessibilityLabel("Move \(meter.title) right")
             .help("Move right in the menu bar")
             Toggle(meter.title, isOn: Binding(get: { model.settings.isVisible(meter) },
                                               set: { value in model.update { $0.setVisible(meter, value) } }))
@@ -122,5 +155,17 @@ struct SettingsView: View {
                 .padding(.leading, 4)
         }
         .buttonStyle(.borderless)
+    }
+
+    private static func icon(for meter: Meter) -> String {
+        switch meter {
+        case .cpu: "cpu"
+        case .gpu: "square.grid.2x2"
+        case .memory: "memorychip"
+        case .disk: "internaldrive"
+        case .temperature: "thermometer.medium"
+        case .battery: "battery.75percent"
+        case .network: "arrow.up.arrow.down"
+        }
     }
 }

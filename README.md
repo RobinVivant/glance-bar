@@ -103,9 +103,9 @@ swift run GlanceBar --demo
     | GPU | Gauge | Utilization of the busiest GPU |
     | Memory | Gauge | Memory pressure, the figure Activity Monitor graphs |
     | Disk | Gauge | Used share of the startup volume |
-    | Temperature | Text | Average of the CPU core sensors, in °C |
-    | Battery | Text | Charge percent; left out on a Mac without a battery |
-    | Network | Two lines of text | Upload over download, summed over the `en*` interfaces |
+    | Temperature | Text | Average of the CPU core sensors, in °C or °F |
+    | Battery | Text | Charge percent with a charging bolt or plugged-in glyph; left out on a Mac without a battery |
+    | Network | Two lines of text | Upload over download, summed over physical `en*` interfaces; idle `0 KB/s` rows dim |
 
 - **Colors**: the item is monochrome and follows the menu bar's appearance. A reading turns
   orange, then red, at fixed thresholds.
@@ -116,23 +116,25 @@ swift run GlanceBar --demo
     | Memory | Kernel pressure level "warning" | Kernel pressure level "critical" |
     | Disk used | 90% | 95% |
     | CPU and GPU temperature | 90° | 100° |
-    | SSD temperature, in the panel | 65° | 75° |
+    | SSD temperature, in the panel | 65° | 75% |
     | Battery temperature, in the panel | 40° | 45° |
     | Battery, on battery power only | 20% | 10% |
     | Battery health, in the panel | Below 80% | Never |
 
-- **Panel** (left click): CPU history and one bar per core, memory split into app, wired and
-  compressed with the pressure level, network rates with a chart and the totals since boot, disk
-  space, battery time, health and cycle count, and the CPU, GPU, SSD and battery temperatures.
-  Battery health is what a full charge holds as a share of the design capacity, the figure macOS
-  calls Maximum Capacity. The footer shows what Glance Bar itself uses.
+- **Panel** (left click): CPU, GPU and memory summary tiles with usage bars, CPU user/system
+  history and one bar per core, memory split into app, wired and compressed with the pressure
+  level, network rates with a chart, boot totals and peak scale, disk space (with purgeable space
+  when at least 1 GB), battery time, live wattage (or charger rating), health and cycle count, and
+  the CPU, GPU, SSD and battery temperatures. Battery health is what a full charge holds as a share
+  of the design capacity, the figure macOS calls Maximum Capacity. The footer shows what Glance Bar
+  itself uses.
 - **Pointing and clicking in the panel**: a part lights up under the pointer when a click does
   something, and interactive tiles and cards can also be reached with Tab and Return or Space.
   A figure with more behind it explains itself in a tooltip.
 
     | Part | Under the pointer | A click |
     |------|-------------------|---------|
-    | CPU history and network chart | The reading of that column and how long ago it was taken | Opens Activity Monitor or Network settings, as the rest of the card does |
+    | CPU history and network chart | The reading of that column (`user` and `system` share on CPU) and how long ago it was taken | Opens Activity Monitor or Network settings, as the rest of the card does |
     | Core bars | The core's number, its kind and its load | Opens Activity Monitor |
     | Memory bar and its legend | What app, wired or compressed memory is, and its share of the total | Opens Activity Monitor |
     | Memory pressure pill | What memory pressure and its color mean | Opens Activity Monitor |
@@ -140,22 +142,23 @@ swift run GlanceBar --demo
     | CPU, GPU and memory tiles | What the figures mean | Opens Activity Monitor |
     | Network card | That download and upload scale to their own peaks | Opens Network settings |
     | Network address | | Copies the address |
-    | Network totals ("Since boot") | Which interfaces the totals cover | Opens Network settings |
+    | Network totals and peaks ("Boot" / "Peak") | Which interfaces the totals cover, and the highest rates in the chart | Opens Network settings |
     | Disk card | How free space is counted | Opens Storage settings |
     | Battery card | What health means | Opens Battery settings |
-    | Temperatures | Which sensors a figure comes from | |
+    | Temperatures | Sensor source and orange/red thresholds in the card header and tooltip | |
     | Chip name in the header | | Opens About in System Settings |
     | Activity Monitor button in the header | | Opens Activity Monitor |
     | Refresh interval in the footer | | Opens the settings |
     | App usage in the footer | What the CPU share and memory footprint mean | |
 
     <p align="center">
-      <img src="docs/screenshots/panel-hover-dark.png" width="38%" alt="Detail panel with the pointer on a column of the CPU history: the card is lit, the column stands out and the caption reads 55 percent, 48 seconds ago">
+      <img src="docs/screenshots/panel-hover-dark.png" width="38%" alt="Detail panel with the pointer on a column of the CPU history: the card is lit, the column stands out and the caption reads 55 percent, user 40 percent, sys 15 percent, 48 seconds ago">
     </p>
 
-- **Settings** (the gear in the panel, or `⌘,`): a switch and order arrows per meter, the refresh
-  interval (1, 2, 3 or 5 seconds, 2 by default), Open at login, Activity Monitor and Quit. Press
-  `⌘W` to close the panel and `⌘Q` to quit.
+- **Settings** (the gear in the panel, or `⌘,`): meter icons, visibility switches, order arrows
+  and one-click Reset when customized, the refresh interval (1, 2, 3 or 5 seconds, 2 by default),
+  temperature unit (`°C` or `°F`), Open at login, Activity Monitor and Quit. Press `⌘W` to close
+  the panel and `⌘Q` to quit.
 - **Right click or Control-click**: Open Activity Monitor, Settings and Quit.
 
 ## What it costs

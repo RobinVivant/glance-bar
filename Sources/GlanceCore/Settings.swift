@@ -30,6 +30,14 @@ public enum Meter: String, CaseIterable, Codable, Identifiable, Sendable {
     }
 }
 
+/// How temperatures are shown in the menu bar, tooltip and panel.
+public enum TemperatureUnit: String, CaseIterable, Codable, Identifiable, Sendable {
+    case celsius, fahrenheit
+
+    public var id: String { rawValue }
+    public var symbol: String { self == .celsius ? "°C" : "°F" }
+}
+
 /// What the menu bar shows and how often it refreshes.
 public struct BarSettings: Codable, Equatable, Sendable {
     public static let intervals = [1, 2, 3, 5]
@@ -40,10 +48,11 @@ public struct BarSettings: Codable, Equatable, Sendable {
     public var hidden: Set<Meter> = []
     /// Seconds between samples.
     public var interval = 2
+    public var temperatureUnit: TemperatureUnit = .celsius
 
     public init() {}
 
-    private enum CodingKeys: String, CodingKey { case order, hidden, interval }
+    private enum CodingKeys: String, CodingKey { case order, hidden, interval, temperatureUnit }
 
     /// Reads meters by name and skips the ones this version does not know, so
     /// settings written by another version still load.
@@ -52,6 +61,8 @@ public struct BarSettings: Codable, Equatable, Sendable {
         order = (try container.decodeIfPresent([String].self, forKey: .order) ?? []).compactMap(Meter.init)
         hidden = Set((try container.decodeIfPresent([String].self, forKey: .hidden) ?? []).compactMap(Meter.init))
         interval = try container.decodeIfPresent(Int.self, forKey: .interval) ?? 2
+        let unitName = try container.decodeIfPresent(String.self, forKey: .temperatureUnit)
+        temperatureUnit = unitName.flatMap(TemperatureUnit.init) ?? .celsius
         self = normalized()
     }
 
@@ -60,6 +71,7 @@ public struct BarSettings: Codable, Equatable, Sendable {
         try container.encode(order.map(\.rawValue), forKey: .order)
         try container.encode(hidden.map(\.rawValue).sorted(), forKey: .hidden)
         try container.encode(interval, forKey: .interval)
+        try container.encode(temperatureUnit.rawValue, forKey: .temperatureUnit)
     }
 
     public var visible: [Meter] { order.filter { !hidden.contains($0) } }

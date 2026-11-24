@@ -7,6 +7,7 @@ enum Palette {
     static let red = Color(nsColor: .systemRed)
 
     static let cpu = Color(nsColor: .systemBlue)
+    static let cpuSystem = Color(nsColor: .systemPurple)
     static let gpu = Color(nsColor: .systemPurple)
     static let memory = Color(nsColor: .systemTeal)
     static let wired = Color(nsColor: .systemBlue)
@@ -23,6 +24,18 @@ enum Palette {
         case .critical: red
         }
     }
+
+    static func meter(_ meter: Meter) -> Color {
+        switch meter {
+        case .cpu: cpu
+        case .gpu: gpu
+        case .memory: memory
+        case .disk: disk
+        case .temperature: amber
+        case .battery: ok
+        case .network: download
+        }
+    }
 }
 
 enum Surface {
@@ -31,6 +44,10 @@ enum Surface {
     /// The fill of a card or tile, a shade stronger under the pointer.
     static func fill(highlighted: Bool) -> Color {
         Color.primary.opacity(highlighted ? 0.12 : 0.055)
+    }
+
+    static func stroke(highlighted: Bool) -> Color {
+        Color.primary.opacity(highlighted ? 0.18 : 0.08)
     }
 }
 
@@ -45,6 +62,8 @@ struct Card<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Surface.fill(highlighted: highlighted),
                         in: RoundedRectangle(cornerRadius: Surface.corner, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Surface.corner, style: .continuous)
+                .strokeBorder(Surface.stroke(highlighted: highlighted), lineWidth: 0.5))
     }
 }
 
@@ -135,6 +154,8 @@ struct StatTile: View {
     var label: String
     var color: Color = .primary
     var detail: String?
+    var fill: Double? = nil
+    var accent: Color = .primary
     var highlighted = false
 
     var body: some View {
@@ -149,12 +170,27 @@ struct StatTile: View {
             if let detail {
                 Text(detail).font(.system(size: 10)).foregroundStyle(.tertiary).lineLimit(1)
             }
+            if let fill {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.primary.opacity(0.1))
+                        if fill > 0 {
+                            Capsule().fill(accent.gradient)
+                                .frame(width: max(3, geometry.size.width * CGFloat(min(1, fill))))
+                        }
+                    }
+                }
+                .frame(height: 3)
+                .padding(.top, 4)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Surface.fill(highlighted: highlighted),
                     in: RoundedRectangle(cornerRadius: Surface.corner, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Surface.corner, style: .continuous)
+            .strokeBorder(Surface.stroke(highlighted: highlighted), lineWidth: 0.5))
     }
 }
 
@@ -220,8 +256,11 @@ extension View {
 struct HistoryChart: View {
     /// Shares of the full height, oldest first.
     var values: [Float]
+    /// Optional bottom slice (such as system CPU share) drawn inside normal-level bars.
+    var secondary: [Float] = []
     var slots: Int
     var color: Color
+    var secondaryColor: Color = Palette.cpuSystem
     /// The column under the pointer: its track lights up and the other bars fade.
     var highlight: Int?
     /// Called with the column under the pointer, or nil once the pointer leaves the chart.
@@ -241,9 +280,20 @@ struct HistoryChart: View {
                 let value = Double(values[slot - empty])
                 let height = max(1.5, size.height * CGFloat(min(1, value)))
                 let bar = CGRect(x: x, y: size.height - height, width: width, height: height)
-                context.fill(Path(roundedRect: bar, cornerRadius: 1.5),
-                             with: .color(Palette.level(Levels.load(value), normal: color)
-                                 .opacity(highlight == nil || highlight == slot ? 1 : Fade.others)))
+                let barPath = Path(roundedRect: bar, cornerRadius: 1.5)
+                let level = Levels.load(value)
+                let opacity = highlight == nil || highlight == slot ? 1 : Fade.others
+                context.fill(barPath, with: .color(Palette.level(level, normal: color).opacity(opacity)))
+                if level == .normal, secondary.count == values.count {
+                    let sub = Double(secondary[slot - empty])
+                    if sub > 0 {
+                        let subHeight = min(height, max(1.5, size.height * CGFloat(min(1, sub))))
+                        let slice = CGRect(x: x, y: size.height - subHeight, width: width, height: subHeight)
+                        var clipped = context
+                        clipped.clip(to: barPath)
+                        clipped.fill(Path(slice), with: .color(secondaryColor.opacity(opacity)))
+                    }
+                }
             }
         }
         .probing(slots: slots, onProbe)

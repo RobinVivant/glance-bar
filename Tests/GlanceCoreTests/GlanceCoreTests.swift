@@ -208,6 +208,17 @@ import Testing
     @Test func degreesRound() {
         #expect(Format.degrees(61.5) == "62°")
         #expect(Format.degrees(104.2) == "104°")
+        #expect(Format.degrees(0, unit: .fahrenheit) == "32°")
+        #expect(Format.degrees(58, unit: .fahrenheit) == "136°")
+        #expect(Format.degrees(100, unit: .fahrenheit) == "212°")
+    }
+
+    @Test func wattsFormatWithOneDecimalBelowOneHundred() {
+        #expect(Format.watts(0) == "0 W")
+        #expect(Format.watts(8.4) == "8.4 W")
+        #expect(Format.watts(14.24) == "14.2 W")
+        #expect(Format.watts(99.96) == "100 W")
+        #expect(Format.watts(105) == "105 W")
     }
 
     static let durationCases: [(TimeInterval, String)] = [
@@ -350,6 +361,7 @@ import Testing
         settings.setVisible(.disk, false)
         settings.move(.network, by: -1)
         settings.interval = 5
+        settings.temperatureUnit = .fahrenheit
         let decoded = try JSONDecoder().decode(BarSettings.self, from: JSONEncoder().encode(settings))
         #expect(decoded == settings)
     }
@@ -360,6 +372,7 @@ import Testing
         #expect(settings.order == [.network, .cpu, .gpu, .memory, .disk, .temperature, .battery])
         #expect(settings.hidden == [.gpu])
         #expect(settings.interval == 2)
+        #expect(settings.temperatureUnit == .celsius)
     }
 
     @Test func anEmptyObjectLoadsTheDefaults() throws {
@@ -459,7 +472,18 @@ import Testing
             .text("9%", template: "88%", level: .critical),
         ])
         let full = BarContent.make(snapshot: snapshot, cpuHistory: [], visible: [.battery])
-        #expect(full.items == [.text("100%", template: "100%", level: .normal)])
+        #expect(full.items == [.text("100%", template: "100%", level: .normal, glyph: .plug)])
+
+        var charging = snapshot
+        charging.battery = BatteryReading(percent: 64, charging: true, onAC: true)
+        let bolt = BarContent.make(snapshot: charging, cpuHistory: [], visible: [.battery])
+        #expect(bolt.items == [.text("64%", template: "88%", level: .normal, glyph: .bolt)])
+    }
+
+    @Test func temperatureConvertsToFahrenheitWhenRequested() {
+        let content = BarContent.make(snapshot: snapshot, cpuHistory: [], visible: [.temperature],
+                                      temperatureUnit: .fahrenheit)
+        #expect(content.items == [.text("143°", template: "888°", level: .normal)])
     }
 
     @Test func aMeterWithoutAReadingIsLeftOut() {
@@ -646,6 +670,29 @@ import Testing
         #expect(BatteryMath.reading(from: source([kIOPSMaxCapacityKey: 0])) == nil)
         #expect(BatteryMath.reading(from: [:]) == nil)
     }
+
+    @Test func powerReadsWattsAndAdapterRating() throws {
+        let discharging = BatteryMath.power(from: ["Voltage": 12_000, "InstantAmperage": -1200])
+        #expect(abs((try #require(discharging.watts)) - (-14.4)) < 1e-6)
+        #expect(discharging.adapterWatts == nil)
+
+        let charging = BatteryMath.power(from: [
+            "Voltage": 12_500, "InstantAmperage": 3840, "AdapterDetails": ["Watts": 96],
+        ])
+        #expect(abs((try #require(charging.watts)) - 48.0) < 1e-6)
+        #expect(charging.adapterWatts == 96)
+
+        let idle = BatteryMath.power(from: [
+            "Voltage": 12_000, "InstantAmperage": 10, "Amperage": 0, "AdapterDetails": ["Watts": 60],
+        ])
+        #expect(idle.watts == nil)
+        #expect(idle.adapterWatts == 60)
+
+        let fallbackAmperage = BatteryMath.power(from: ["Voltage": 12_000, "Amperage": -1000])
+        #expect(abs((try #require(fallbackAmperage.watts)) - (-12.0)) < 1e-6)
+
+        #expect(BatteryMath.power(from: [:]) == BatteryPower())
+    }
 }
 
 @Suite struct DiskTests {
@@ -653,6 +700,7 @@ import Testing
         #expect(DiskReading(total: 1000, free: 250).usedFraction == 0.75)
         #expect(DiskReading(total: 0, free: 0).usedFraction == 0)
         #expect(DiskReading(total: 100, free: 400).usedFraction == 0)
+        #expect(DiskReading(total: 1000, free: 250, purgeable: 40).purgeable == 40)
     }
 
     @Test func theLiveSamplerReadsTheStartupVolume() throws {
@@ -787,5 +835,10 @@ import Testing
         #expect(BarSummary.lines(snapshot: snapshot, visible: [.battery, .gpu, .disk])
             == ["Disk 59% used, 412 GB free"])
         #expect(BarSummary.lines(snapshot: Snapshot(), visible: Meter.allCases).isEmpty)
+    }
+
+    @Test func temperatureSummaryFollowsUnit() {
+        #expect(BarSummary.lines(snapshot: Self.snapshot, visible: [.temperature], temperatureUnit: .fahrenheit)
+            == ["CPU 136°, hottest core 153°"])
     }
 }
